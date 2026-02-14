@@ -177,6 +177,42 @@ var DOM = {
 
 
 /* ========================================================
+ * Frappe Gantt 日本語化ヘルパー
+ * v0.6.1はjaロケール未対応のため、レンダリング後にSVGテキストを置換
+ * ======================================================== */
+function japanifyGantt() {
+  var ganttEl = document.getElementById('gantt');
+  if (!ganttEl) return;
+
+  var monthMap = {
+    'January': '1月', 'February': '2月', 'March': '3月', 'April': '4月',
+    'May': '5月', 'June': '6月', 'July': '7月', 'August': '8月',
+    'September': '9月', 'October': '10月', 'November': '11月', 'December': '12月',
+    'Jan': '1月', 'Feb': '2月', 'Mar': '3月', 'Apr': '4月',
+    'Jun': '6月', 'Jul': '7月', 'Aug': '8月',
+    'Sep': '9月', 'Oct': '10月', 'Nov': '11月', 'Dec': '12月'
+  };
+
+  var dayMap = {
+    'Sun': '日', 'Mon': '月', 'Tue': '火', 'Wed': '水',
+    'Thu': '木', 'Fri': '金', 'Sat': '土'
+  };
+
+  var texts = ganttEl.querySelectorAll('.upper-text, .lower-text');
+  texts.forEach(function(el) {
+    var t = el.textContent;
+    Object.keys(monthMap).forEach(function(en) {
+      t = t.replace(new RegExp('\\b' + en + '\\b', 'g'), monthMap[en]);
+    });
+    Object.keys(dayMap).forEach(function(en) {
+      t = t.replace(new RegExp('\\b' + en + '\\b', 'g'), dayMap[en]);
+    });
+    if (t !== el.textContent) el.textContent = t;
+  });
+}
+
+
+/* ========================================================
  * GanttManager - Frappe Gantt 初期化 & イベント
  * ======================================================== */
 var GanttManager = (function() {
@@ -379,7 +415,6 @@ var GanttManager = (function() {
     ganttEl.style.display = 'block';
     emptyEl.style.display = 'none';
 
-    console.log('[Gantt] tasks count:', tasks.length, 'sample:', JSON.stringify(tasks[0]));
     gantt = new Gantt('#gantt', tasks, {
       view_mode: currentViewMode,
       date_format: 'YYYY-MM-DD HH:mm:ss',
@@ -400,6 +435,7 @@ var GanttManager = (function() {
     });
 
     setupContextMenu();
+    japanifyGantt();
   }
 
   function handleDateChange(task, start, end) {
@@ -494,6 +530,7 @@ var GanttManager = (function() {
     if (gantt) {
       try {
         gantt.refresh(tasks);
+        japanifyGantt();
       } catch (e) {
         // refresh失敗時はGanttを再生成
         console.warn('Gantt refresh failed, reinitializing:', e.message);
@@ -510,6 +547,7 @@ var GanttManager = (function() {
     currentViewMode = mode;
     if (gantt) {
       gantt.change_view_mode(mode);
+      japanifyGantt();
     }
   }
 
@@ -1176,15 +1214,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   DataManager.loadData()
     .then(function() {
-      // 初回初期化 (Observer登録前に実施) - 各ステップに診断ラベル付き
-      try { GanttManager.init(); } catch(e) { throw new Error('[Client:GanttInit] ' + e.message); }
-      try { GanttManager.setupGanttFilters(); } catch(e) { throw new Error('[Client:GanttFilters] ' + e.message); }
-      try { GanttManager.populateGanttFilterOptions(); } catch(e) { throw new Error('[Client:GanttPopulate] ' + e.message); }
-      try { UIManager.renderUnassignedPool(); } catch(e) { throw new Error('[Client:RenderPool] ' + e.message); }
-      try { UIManager.setupDragDrop(); } catch(e) { throw new Error('[Client:DragDrop] ' + e.message); }
-      try { UIManager.setupSidebarFilters(); } catch(e) { throw new Error('[Client:SidebarFilters] ' + e.message); }
-      try { UIManager.setupCSVImport(); } catch(e) { throw new Error('[Client:CSVImport] ' + e.message); }
-      try { StatusManager.setup(); } catch(e) { throw new Error('[Client:StatusSetup] ' + e.message); }
+      // 初回初期化 (Observer登録前に実施)
+      GanttManager.init();
+      GanttManager.setupGanttFilters();
+      GanttManager.populateGanttFilterOptions();
+      UIManager.renderUnassignedPool();
+      UIManager.setupDragDrop();
+      UIManager.setupSidebarFilters();
+      UIManager.setupCSVImport();
+      StatusManager.setup();
 
       // 初期化完了後にObserverを登録 (以降のデータ更新でUI自動更新)
       DataManager.subscribe(function() {

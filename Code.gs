@@ -37,27 +37,16 @@ function getUserInfo() {
  */
 function getData() {
   try {
-    var orders, vehicles;
-    try {
-      orders = getAllOrders();
-    } catch (err) {
-      return { success: false, error: '[Server:getAllOrders] ' + err.message };
-    }
-    try {
-      vehicles = getAllVehicles();
-    } catch (err) {
-      return { success: false, error: '[Server:getAllVehicles] ' + err.message };
-    }
     return {
       success: true,
-      orders: orders,
-      vehicles: vehicles,
+      orders: getAllOrders(),
+      vehicles: getAllVehicles(),
       timestamp: new Date().toISOString()
     };
   } catch (err) {
     return {
       success: false,
-      error: '[Server:getData] ' + err.message
+      error: err.message
     };
   }
 }
