@@ -322,8 +322,8 @@ var GanttManager = (function() {
         return {
           id: order.requestId,
           name: displayName,
-          start: startDate + ' ' + startTime,
-          end: endDate + ' ' + endTime,
+          start: startDate + ' ' + startTime + ':00',
+          end: endDate + ' ' + endTime + ':00',
           progress: order.status === STATUS.COMPLETED ? 100 : (order.status === STATUS.EN_ROUTE ? 50 : 0),
           custom_class: getStatusClass(order.status),
           dependencies: ''
@@ -379,9 +379,10 @@ var GanttManager = (function() {
     ganttEl.style.display = 'block';
     emptyEl.style.display = 'none';
 
+    console.log('[Gantt] tasks count:', tasks.length, 'sample:', JSON.stringify(tasks[0]));
     gantt = new Gantt('#gantt', tasks, {
       view_mode: currentViewMode,
-      date_format: 'YYYY-MM-DD HH:mm',
+      date_format: 'YYYY-MM-DD HH:mm:ss',
       bar_height: 30,
       bar_corner_radius: 4,
       arrow_curve: 5,
