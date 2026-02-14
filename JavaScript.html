@@ -234,9 +234,15 @@ var GanttManager = (function() {
           endTime = ('0' + h).slice(-2) + ':' + parts[1];
         }
 
+        // バー表示名: 割当済なら車番も表示
+        var displayName = order.shipper + ' - ' + order.cargoName;
+        if (order.vehicleNumber) {
+          displayName = '[' + order.vehicleNumber + '] ' + displayName;
+        }
+
         return {
           id: order.requestId,
-          name: order.shipper + ' - ' + order.cargoName,
+          name: displayName,
           start: startDate + ' ' + startTime,
           end: endDate + ' ' + endTime,
           progress: order.status === STATUS.COMPLETED ? 100 : (order.status === STATUS.EN_ROUTE ? 50 : 0),
@@ -278,19 +284,13 @@ var GanttManager = (function() {
   }
 
   function init() {
-    var assigned = DataManager.getAssignedOrders();
+    // 全受注をガントチャートに表示 (未割当=グレー, 割当済=青, 配送中=オレンジ, 完了=緑)
+    var allOrders = DataManager.getOrders();
     var ganttEl = document.getElementById('gantt');
     var emptyEl = document.getElementById('ganttEmpty');
 
-    if (assigned.length === 0) {
-      ganttEl.style.display = 'none';
-      emptyEl.style.display = 'block';
-      return;
-    }
+    var tasks = mapOrdersToGanttTasks(allOrders);
 
-    var tasks = mapOrdersToGanttTasks(assigned);
-
-    // 有効な日付を持つタスクが0件ならガント非表示
     if (tasks.length === 0) {
       ganttEl.style.display = 'none';
       emptyEl.style.display = 'block';
@@ -395,11 +395,11 @@ var GanttManager = (function() {
   }
 
   function refresh() {
-    var assigned = DataManager.getAssignedOrders();
+    var allOrders = DataManager.getOrders();
     var ganttEl = document.getElementById('gantt');
     var emptyEl = document.getElementById('ganttEmpty');
 
-    var tasks = mapOrdersToGanttTasks(assigned);
+    var tasks = mapOrdersToGanttTasks(allOrders);
 
     if (tasks.length === 0) {
       DOM.clear(ganttEl);
