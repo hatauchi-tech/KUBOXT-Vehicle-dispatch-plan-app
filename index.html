@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Bootstrap 5.3 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Frappe Gantt CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css" rel="stylesheet">
+
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+
+  <!-- ===== Loading Overlay ===== -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="text-center">
+      <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-3 text-muted">データを読み込み中...</p>
+    </div>
+  </div>
+
+  <!-- ===== Header / Navbar ===== -->
+  <nav class="navbar navbar-dark bg-dark px-3">
+    <span class="navbar-brand mb-0 h1">KUBOXT Dispatch Planner</span>
+
+    <div class="d-flex align-items-center gap-3">
+      <!-- View Mode Switcher -->
+      <div class="view-mode-switcher btn-group" role="group" aria-label="View mode">
+        <input type="radio" class="btn-check" name="viewMode" id="viewDay" value="Day" autocomplete="off">
+        <label class="btn btn-outline-light btn-sm" for="viewDay">Day</label>
+
+        <input type="radio" class="btn-check" name="viewMode" id="viewWeek" value="Week" autocomplete="off" checked>
+        <label class="btn btn-outline-light btn-sm" for="viewWeek">Week</label>
+
+        <input type="radio" class="btn-check" name="viewMode" id="viewMonth" value="Month" autocomplete="off">
+        <label class="btn btn-outline-light btn-sm" for="viewMonth">Month</label>
+      </div>
+
+      <!-- CSV Import Button -->
+      <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#csvImportModal">
+        CSV Import
+      </button>
+    </div>
+  </nav>
+
+  <!-- ===== Main Content ===== -->
+  <div class="container-fluid dashboard-container">
+    <div class="row h-100">
+      <!-- Sidebar: Unassigned Orders -->
+      <div class="col-md-3 sidebar">
+        <h6 class="text-uppercase text-muted mb-3">
+          未割当受注
+          <span id="unassignedCount" class="badge bg-secondary ms-1">0</span>
+        </h6>
+        <div id="unassignedPool"></div>
+      </div>
+
+      <!-- Main: Gantt Chart -->
+      <div class="col-md-9 gantt-container" id="ganttDropZone">
+        <div id="gantt"></div>
+        <div id="ganttEmpty" class="text-center text-muted py-5" style="display: none;">
+          <p>割当済みの受注がありません。<br>左のパネルからドラッグして割り当ててください。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Task Details Modal ===== -->
+  <div class="modal fade" id="taskDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">受注詳細</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="taskDetailsBody">
+          <!-- Populated by JavaScript -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Vehicle Select Modal ===== -->
+  <div class="modal fade" id="vehicleSelectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">車両を選択</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="vehicleSelectList" class="list-group">
+            <!-- Populated by JavaScript -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CSV Import Modal ===== -->
+  <div class="modal fade" id="csvImportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">CSVインポート</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="csvFileInput" class="form-label">CSVファイルを選択</label>
+            <input type="file" class="form-control" id="csvFileInput" accept=".csv">
+          </div>
+          <div id="csvPreview" style="display: none;">
+            <p class="text-muted small" id="csvPreviewInfo"></p>
+          </div>
+          <div id="csvImportProgress" style="display: none;">
+            <div class="progress">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+            </div>
+            <p class="text-muted small mt-2">インポート中...</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="csvImportBtn" disabled>インポート</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Context Menu ===== -->
+  <div id="customContextMenu" class="custom-context-menu">
+    <button class="menu-item" id="ctxEdit">詳細を編集</button>
+    <div class="menu-divider"></div>
+    <button class="menu-item" id="ctxUnassign">割当解除</button>
+  </div>
+
+  <!-- ===== Toast Container ===== -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+  <!-- Bootstrap 5.3 JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Frappe Gantt JS -->
+  <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+
+  <?!= include('JavaScript'); ?>
+
+</body>
+</html>
