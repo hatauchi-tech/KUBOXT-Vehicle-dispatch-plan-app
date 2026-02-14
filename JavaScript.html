@@ -1176,15 +1176,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   DataManager.loadData()
     .then(function() {
-      // 初回初期化 (Observer登録前に実施)
-      GanttManager.init();
-      GanttManager.setupGanttFilters();
-      GanttManager.populateGanttFilterOptions();
-      UIManager.renderUnassignedPool();
-      UIManager.setupDragDrop();
-      UIManager.setupSidebarFilters();
-      UIManager.setupCSVImport();
-      StatusManager.setup();
+      // 初回初期化 (Observer登録前に実施) - 各ステップに診断ラベル付き
+      try { GanttManager.init(); } catch(e) { throw new Error('[Client:GanttInit] ' + e.message); }
+      try { GanttManager.setupGanttFilters(); } catch(e) { throw new Error('[Client:GanttFilters] ' + e.message); }
+      try { GanttManager.populateGanttFilterOptions(); } catch(e) { throw new Error('[Client:GanttPopulate] ' + e.message); }
+      try { UIManager.renderUnassignedPool(); } catch(e) { throw new Error('[Client:RenderPool] ' + e.message); }
+      try { UIManager.setupDragDrop(); } catch(e) { throw new Error('[Client:DragDrop] ' + e.message); }
+      try { UIManager.setupSidebarFilters(); } catch(e) { throw new Error('[Client:SidebarFilters] ' + e.message); }
+      try { UIManager.setupCSVImport(); } catch(e) { throw new Error('[Client:CSVImport] ' + e.message); }
+      try { StatusManager.setup(); } catch(e) { throw new Error('[Client:StatusSetup] ' + e.message); }
 
       // 初期化完了後にObserverを登録 (以降のデータ更新でUI自動更新)
       DataManager.subscribe(function() {
