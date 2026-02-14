@@ -8,9 +8,6 @@
   <!-- Bootstrap 5.3 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
-  <!-- Frappe Gantt CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css" rel="stylesheet">
-
   <?!= include('Stylesheet'); ?>
 </head>
 <body>
@@ -40,18 +37,6 @@
     </ul>
 
     <div class="d-flex align-items-center gap-3" id="ganttNavControls">
-      <!-- 表示切替 -->
-      <div class="view-mode-switcher btn-group" role="group" aria-label="表示モード">
-        <input type="radio" class="btn-check" name="viewMode" id="viewDay" value="Day" autocomplete="off">
-        <label class="btn btn-outline-light btn-sm" for="viewDay">日</label>
-
-        <input type="radio" class="btn-check" name="viewMode" id="viewWeek" value="Week" autocomplete="off" checked>
-        <label class="btn btn-outline-light btn-sm" for="viewWeek">週</label>
-
-        <input type="radio" class="btn-check" name="viewMode" id="viewMonth" value="Month" autocomplete="off">
-        <label class="btn btn-outline-light btn-sm" for="viewMonth">月</label>
-      </div>
-
       <!-- CSVインポート -->
       <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#csvImportModal">
         CSVインポート
@@ -59,7 +44,7 @@
     </div>
   </nav>
 
-  <!-- ===== ガントビュー (配車計画) ===== -->
+  <!-- ===== 配車計画ビュー ===== -->
   <div id="viewGantt" class="container-fluid dashboard-container">
     <div class="row h-100">
       <!-- Sidebar: Unassigned Orders -->
@@ -85,33 +70,34 @@
         <div id="unassignedPool"></div>
       </div>
 
-      <!-- Main: Gantt Chart -->
-      <div class="col-md-9 gantt-container" id="ganttDropZone">
-        <!-- ガントフィルターバー -->
-        <div class="gantt-filter-bar d-flex align-items-center gap-2 mb-2 flex-wrap">
-          <div>
-            <label class="form-label small text-muted mb-0">車種</label>
-            <select class="form-select form-select-sm" id="ganttFilterVehicleType" style="width:auto;min-width:120px;">
-              <option value="">すべて</option>
-            </select>
-          </div>
+      <!-- Main: Vehicle Schedule -->
+      <div class="col-md-9 p-0 d-flex flex-column">
+        <!-- スケジュールフィルターバー -->
+        <div class="schedule-filter-bar d-flex align-items-center gap-2 px-3 py-2 flex-wrap">
           <div>
             <label class="form-label small text-muted mb-0">日付</label>
-            <input type="date" class="form-control form-control-sm" id="ganttFilterDate" style="width:auto;">
+            <input type="date" class="form-control form-control-sm" id="scheduleDate" style="width:auto;">
           </div>
           <div>
-            <label class="form-label small text-muted mb-0">荷主</label>
-            <select class="form-select form-select-sm" id="ganttFilterShipper" style="width:auto;min-width:150px;">
+            <label class="form-label small text-muted mb-0">車種</label>
+            <select class="form-select form-select-sm" id="scheduleVehicleType" style="width:auto;min-width:120px;">
               <option value="">すべて</option>
             </select>
           </div>
-          <div class="ms-auto">
-            <button class="btn btn-outline-secondary btn-sm" id="clearGanttFilter">クリア</button>
+          <div class="d-flex align-items-end gap-1">
+            <button class="btn btn-outline-secondary btn-sm" id="schedulePrevDay" title="前日">&#9664;</button>
+            <button class="btn btn-outline-primary btn-sm" id="scheduleToday">今日</button>
+            <button class="btn btn-outline-secondary btn-sm" id="scheduleNextDay" title="翌日">&#9654;</button>
           </div>
         </div>
-        <div id="gantt"></div>
-        <div id="ganttEmpty" class="text-center text-muted py-5" style="display: none;">
-          <p>割当済みの受注がありません。<br>左のパネルからドラッグして割り当ててください。</p>
+
+        <!-- スケジュールグリッド -->
+        <div class="schedule-wrapper flex-grow-1">
+          <div class="schedule-header" id="scheduleHeader"></div>
+          <div class="schedule-body" id="scheduleBody"></div>
+        </div>
+        <div id="scheduleEmpty" class="text-center text-muted py-5" style="display: none;">
+          <p>表示する車両がありません。</p>
         </div>
       </div>
     </div>
@@ -262,27 +248,9 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body" id="taskDetailsBody">
-          <!-- Populated by JavaScript -->
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Vehicle Select Modal ===== -->
-  <div class="modal fade" id="vehicleSelectModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">車両を選択</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div id="vehicleSelectList" class="list-group">
-            <!-- Populated by JavaScript -->
-          </div>
         </div>
       </div>
     </div>
@@ -331,9 +299,6 @@
 
   <!-- Bootstrap 5.3 JS Bundle -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!-- Frappe Gantt JS -->
-  <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
 
   <?!= include('JavaScript'); ?>
 

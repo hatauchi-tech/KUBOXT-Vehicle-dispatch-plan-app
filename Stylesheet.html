@@ -10,12 +10,6 @@
   .status-badge-enroute { color: #212529; background-color: #ffc107; }
   .status-badge-completed { color: #fff; background-color: #198754; }
 
-  /* ===== Gantt Bar Colors ===== */
-  .gantt .bar-wrapper .bar.status-unassigned .bar-progress { fill: #6c757d; }
-  .gantt .bar-wrapper .bar.status-assigned .bar-progress { fill: #0d6efd; }
-  .gantt .bar-wrapper .bar.status-enroute .bar-progress { fill: #ffc107; }
-  .gantt .bar-wrapper .bar.status-completed .bar-progress { fill: #198754; }
-
   /* ===== Layout ===== */
   .dashboard-container {
     height: calc(100vh - 56px);
@@ -27,12 +21,6 @@
     overflow-y: auto;
     border-right: 1px solid #dee2e6;
     background-color: #f8f9fa;
-    padding: 1rem;
-  }
-
-  .gantt-container {
-    height: 100%;
-    overflow: auto;
     padding: 1rem;
   }
 
@@ -108,24 +96,179 @@
     background-color: #dee2e6;
   }
 
-  /* ===== Gantt Filter Bar ===== */
-  .gantt-filter-bar {
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #dee2e6;
+  /* ===== Schedule Filter Bar ===== */
+  .schedule-filter-bar {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
   }
 
-  /* ===== Gantt Customizations ===== */
-  .gantt-container .gantt {
-    width: 100%;
+  /* ===== Vehicle Schedule Grid ===== */
+  .schedule-wrapper {
+    overflow: auto;
+    position: relative;
   }
 
-  .gantt .bar-label {
-    font-size: 12px;
-    font-weight: 500;
+  .schedule-header {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #e9ecef;
+    border-bottom: 2px solid #adb5bd;
+    min-height: 32px;
   }
 
-  .gantt .grid-header {
-    fill: #f8f9fa;
+  .schedule-vehicle-header {
+    min-width: 150px;
+    max-width: 150px;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+    border-right: 2px solid #adb5bd;
+    flex-shrink: 0;
+  }
+
+  .schedule-time-labels {
+    display: flex;
+  }
+
+  .schedule-time-label {
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #495057;
+    padding: 0.4rem 0;
+    border-left: 1px solid #ced4da;
+    box-sizing: border-box;
+  }
+
+  .schedule-body {
+    position: relative;
+  }
+
+  .schedule-row {
+    display: flex;
+    border-bottom: 1px solid #e9ecef;
+    min-height: 50px;
+    transition: background-color 0.15s;
+  }
+
+  .schedule-row:nth-child(even) {
+    background-color: #fafbfc;
+  }
+
+  .schedule-row:hover {
+    background-color: #f0f4f8;
+  }
+
+  .schedule-row.drag-over {
+    background-color: rgba(13, 110, 253, 0.08) !important;
+    outline: 2px dashed #0d6efd;
+    outline-offset: -2px;
+  }
+
+  .schedule-vehicle-label {
+    min-width: 150px;
+    max-width: 150px;
+    padding: 0.35rem 0.5rem;
+    border-right: 2px solid #dee2e6;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-shrink: 0;
+    position: sticky;
+    left: 0;
+    background: inherit;
+    z-index: 5;
+  }
+
+  .schedule-row:nth-child(even) .schedule-vehicle-label {
+    background-color: #fafbfc;
+  }
+
+  .schedule-row:hover .schedule-vehicle-label {
+    background-color: #f0f4f8;
+  }
+
+  .vehicle-number {
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .vehicle-driver {
+    font-size: 0.7rem;
+    color: #0d6efd;
+  }
+
+  .vehicle-type-text {
+    font-size: 0.65rem;
+    color: #6c757d;
+  }
+
+  .schedule-timeline {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .schedule-grid-line {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background-color: #e9ecef;
+  }
+
+  .schedule-grid-line.hour-6,
+  .schedule-grid-line.hour-12,
+  .schedule-grid-line.hour-18 {
+    background-color: #ced4da;
+  }
+
+  .schedule-bar {
+    position: absolute;
+    top: 5px;
+    height: calc(100% - 10px);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.68rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    z-index: 5;
+    min-width: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    line-height: 1.3;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.15s;
+  }
+
+  .schedule-bar:hover {
+    opacity: 0.85;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+
+  .current-time-indicator {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background-color: #dc3545;
+    z-index: 8;
+    pointer-events: none;
+  }
+
+  .current-time-header-indicator {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background-color: #dc3545;
+    z-index: 12;
+    pointer-events: none;
   }
 
   /* ===== Loading Overlay ===== */
@@ -140,17 +283,6 @@
     align-items: center;
     justify-content: center;
     z-index: 10000;
-  }
-
-  /* ===== Drop Zone ===== */
-  .gantt-container.drag-over {
-    background-color: rgba(13, 110, 253, 0.05);
-    border: 2px dashed #0d6efd;
-  }
-
-  /* ===== View Mode Switcher ===== */
-  .view-mode-switcher .btn-check:checked + .btn {
-    font-weight: 600;
   }
 
   /* ===== Toast Container ===== */

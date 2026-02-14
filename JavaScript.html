@@ -1,7 +1,7 @@
 <script>
 /**
  * KUBOXT 配車プランナー - クライアントサイドロジック
- * モジュール: DataManager, GanttManager, UIManager
+ * モジュール: DataManager, ScheduleManager, UIManager, StatusManager
  */
 
 // ステータス定数 (サーバーのCONFIG.STATUSと一致させる)
@@ -177,310 +177,273 @@ var DOM = {
 
 
 /* ========================================================
- * Frappe Gantt 日本語化ヘルパー
- * v0.6.1はjaロケール未対応のため、レンダリング後にSVGテキストを置換
+ * ScheduleManager - 車両スケジュールグリッド
+ * 横軸: 24時間 (1日) / 縦軸: 車両
  * ======================================================== */
-function japanifyGantt() {
-  var ganttEl = document.getElementById('gantt');
-  if (!ganttEl) return;
+var ScheduleManager = (function() {
+  var selectedDate = '';
+  var vehicleTypeFilter = '';
+  var SLOT_WIDTH = 80; // ピクセル/時
+  var HOURS = 24;
 
-  var monthMap = {
-    'January': '1月', 'February': '2月', 'March': '3月', 'April': '4月',
-    'May': '5月', 'June': '6月', 'July': '7月', 'August': '8月',
-    'September': '9月', 'October': '10月', 'November': '11月', 'December': '12月',
-    'Jan': '1月', 'Feb': '2月', 'Mar': '3月', 'Apr': '4月',
-    'Jun': '6月', 'Jul': '7月', 'Aug': '8月',
-    'Sep': '9月', 'Oct': '10月', 'Nov': '11月', 'Dec': '12月'
-  };
+  function getTodayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
 
-  var dayMap = {
-    'Sun': '日', 'Mon': '月', 'Tue': '火', 'Wed': '水',
-    'Thu': '木', 'Fri': '金', 'Sat': '土'
-  };
+  function getSelectedDate() {
+    return selectedDate || getTodayStr();
+  }
 
-  var texts = ganttEl.querySelectorAll('.upper-text, .lower-text');
-  texts.forEach(function(el) {
-    var t = el.textContent;
-    Object.keys(monthMap).forEach(function(en) {
-      t = t.replace(new RegExp('\\b' + en + '\\b', 'g'), monthMap[en]);
-    });
-    Object.keys(dayMap).forEach(function(en) {
-      t = t.replace(new RegExp('\\b' + en + '\\b', 'g'), dayMap[en]);
-    });
-    if (t !== el.textContent) el.textContent = t;
-  });
-}
+  function formatDateStr(d) {
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
 
+  function setDate(dateStr) {
+    selectedDate = dateStr;
+    document.getElementById('scheduleDate').value = dateStr;
+    // サイドバーの積込日フィルターと同期
+    document.getElementById('filterLoadDate').value = dateStr;
+    UIManager.syncSidebarDate(dateStr);
+    render();
+  }
 
-/* ========================================================
- * GanttManager - Frappe Gantt 初期化 & イベント
- * ======================================================== */
-var GanttManager = (function() {
-  var gantt = null;
-  var currentViewMode = 'Week';
-  var ganttFilters = {
-    vehicleType: '',
-    date: '',
-    shipper: ''
-  };
+  function getFilteredVehicles() {
+    var vehicles = DataManager.getVehicles();
+    if (vehicleTypeFilter) {
+      vehicles = vehicles.filter(function(v) {
+        return v.vehicleType === vehicleTypeFilter;
+      });
+    }
+    return vehicles;
+  }
 
-  function getFilteredOrders() {
-    var allOrders = DataManager.getOrders();
-    return allOrders.filter(function(o) {
-      if (ganttFilters.vehicleType) {
-        var vType = o.vehicleType || o.requestedType || '';
-        if (vType !== ganttFilters.vehicleType) return false;
-      }
-      if (ganttFilters.date) {
-        var matchDate = ganttFilters.date;
-        var loadD = o.loadDate || '';
-        var unloadD = o.unloadDate || loadD;
-        if (loadD !== matchDate && unloadD !== matchDate) {
-          if (!(loadD <= matchDate && unloadD >= matchDate)) {
-            return false;
-          }
-        }
-      }
-      if (ganttFilters.shipper && o.shipper !== ganttFilters.shipper) {
-        return false;
-      }
-      return true;
+  /** 指定日に稼働する注文を取得 (日をまたぐ案件も対応) */
+  function getOrdersForVehicle(vehicleNumber) {
+    var date = getSelectedDate();
+    return DataManager.getOrders().filter(function(o) {
+      if (o.number !== vehicleNumber) return false;
+      var loadD = o.loadDate || '';
+      var unloadD = o.unloadDate || loadD;
+      return loadD <= date && unloadD >= date;
     });
   }
 
-  function populateGanttFilterOptions() {
-    var orders = DataManager.getOrders();
-    var vehicles = DataManager.getVehicles();
+  /** 日をまたぐ案件の当日表示範囲を計算 */
+  function getBarTimes(order) {
+    var date = getSelectedDate();
+    var loadD = order.loadDate || '';
+    var unloadD = order.unloadDate || loadD;
+    var startTime = (loadD === date) ? (order.loadTime || '00:00') : '00:00';
+    var endTime = (unloadD === date) ? (order.unloadTime || '23:59') : '23:59';
+    return { start: startTime, end: endTime };
+  }
 
+  function timeToMinutes(timeStr) {
+    if (!timeStr) return 0;
+    var parts = timeStr.split(':');
+    return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+  }
+
+  function getStatusColor(status) {
+    switch (status) {
+      case STATUS.ASSIGNED: return '#0d6efd';
+      case STATUS.EN_ROUTE: return '#ffc107';
+      case STATUS.COMPLETED: return '#198754';
+      default: return '#6c757d';
+    }
+  }
+
+  function renderHeader() {
+    var header = document.getElementById('scheduleHeader');
+    DOM.clear(header);
+
+    // 車両ラベルヘッダー
+    header.appendChild(DOM.el('div', { className: 'schedule-vehicle-header', textContent: '車両' }));
+
+    // 時間ラベル
+    var timeLabels = DOM.el('div', { className: 'schedule-time-labels', style: { position: 'relative' } });
+    for (var h = 0; h < HOURS; h++) {
+      var label = DOM.el('div', {
+        className: 'schedule-time-label',
+        style: { width: SLOT_WIDTH + 'px', minWidth: SLOT_WIDTH + 'px' },
+        textContent: ('0' + h).slice(-2) + ':00'
+      });
+      timeLabels.appendChild(label);
+    }
+
+    // 今日なら現在時刻インジケーター (ヘッダー)
+    if (getSelectedDate() === getTodayStr()) {
+      var now = new Date();
+      var nowMin = now.getHours() * 60 + now.getMinutes();
+      var leftPx = nowMin / 60 * SLOT_WIDTH;
+      timeLabels.appendChild(DOM.el('div', {
+        className: 'current-time-header-indicator',
+        style: { left: leftPx + 'px' }
+      }));
+    }
+
+    header.appendChild(timeLabels);
+  }
+
+  function render() {
+    var body = document.getElementById('scheduleBody');
+    var emptyEl = document.getElementById('scheduleEmpty');
+    var vehicles = getFilteredVehicles();
+
+    DOM.clear(body);
+    renderHeader();
+
+    if (vehicles.length === 0) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    var timelineWidth = SLOT_WIDTH * HOURS;
+
+    vehicles.forEach(function(vehicle) {
+      var orders = getOrdersForVehicle(vehicle.number);
+
+      var row = DOM.el('div', { className: 'schedule-row' });
+
+      // 車両ラベル (左固定列)
+      var label = DOM.el('div', { className: 'schedule-vehicle-label' }, [
+        DOM.el('div', { className: 'vehicle-number', textContent: vehicle.number }),
+        DOM.el('div', { className: 'vehicle-driver', textContent: vehicle.driverName || '' }),
+        DOM.el('div', { className: 'vehicle-type-text', textContent: vehicle.vehicleType || '' })
+      ]);
+
+      // タイムライン
+      var timeline = DOM.el('div', {
+        className: 'schedule-timeline',
+        style: { width: timelineWidth + 'px', minWidth: timelineWidth + 'px' }
+      });
+      timeline.setAttribute('data-vehicle', vehicle.number);
+
+      // グリッド線
+      for (var h = 0; h < HOURS; h++) {
+        var lineClass = 'schedule-grid-line';
+        if (h === 6 || h === 12 || h === 18) lineClass += ' hour-' + h;
+        timeline.appendChild(DOM.el('div', {
+          className: lineClass,
+          style: { left: (h * SLOT_WIDTH) + 'px' }
+        }));
+      }
+
+      // 受注バー
+      orders.forEach(function(order) {
+        var times = getBarTimes(order);
+        var startMin = timeToMinutes(times.start);
+        var endMin = timeToMinutes(times.end);
+        if (endMin <= startMin) endMin = Math.min(startMin + 60, 1440);
+
+        var leftPx = startMin / 60 * SLOT_WIDTH;
+        var widthPx = Math.max((endMin - startMin) / 60 * SLOT_WIDTH, 20);
+
+        var barColor = getStatusColor(order.status);
+        var textColor = (order.status === STATUS.EN_ROUTE) ? '#212529' : '#fff';
+
+        var bar = DOM.el('div', {
+          className: 'schedule-bar',
+          style: {
+            left: leftPx + 'px',
+            width: widthPx + 'px',
+            backgroundColor: barColor,
+            color: textColor
+          }
+        }, [
+          DOM.el('span', { textContent: order.shipper + ' - ' + order.cargoName })
+        ]);
+        bar.setAttribute('data-order-id', order.requestId);
+        bar.title = order.shipper + ' ' + order.cargoName +
+          '\n' + times.start + ' - ' + times.end +
+          '\n' + [order.loadLocation1, order.loadLocation2].filter(Boolean).join(' ') +
+          ' → ' + [order.unloadLocation1, order.unloadLocation2].filter(Boolean).join(' ');
+
+        // クリックで詳細モーダル
+        bar.addEventListener('click', function(e) {
+          e.stopPropagation();
+          UIManager.showTaskDetailsModal(order);
+        });
+
+        timeline.appendChild(bar);
+      });
+
+      // 今日なら現在時刻インジケーター
+      if (getSelectedDate() === getTodayStr()) {
+        var now = new Date();
+        var nowMin = now.getHours() * 60 + now.getMinutes();
+        timeline.appendChild(DOM.el('div', {
+          className: 'current-time-indicator',
+          style: { left: (nowMin / 60 * SLOT_WIDTH) + 'px' }
+        }));
+      }
+
+      // ドラッグ&ドロップ: サイドバーから車両行へ直接割当
+      timeline.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('drag-over');
+      });
+
+      timeline.addEventListener('dragleave', function(e) {
+        if (!timeline.contains(e.relatedTarget)) {
+          row.classList.remove('drag-over');
+        }
+      });
+
+      timeline.addEventListener('drop', function(e) {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        var orderId = e.dataTransfer.getData('text/plain');
+        if (orderId) {
+          assignOrder(orderId, vehicle.number);
+        }
+      });
+
+      row.appendChild(label);
+      row.appendChild(timeline);
+      body.appendChild(row);
+    });
+  }
+
+  function assignOrder(orderId, vehicleNumber) {
+    DataManager.updateOrder(orderId, {
+      number: vehicleNumber,
+      status: STATUS.ASSIGNED
+    }).then(function() {
+      UIManager.showToast('車両 ' + vehicleNumber + ' に割当しました。', 'success');
+    }).catch(function(err) {
+      UIManager.showToast('割当に失敗: ' + err.message, 'danger');
+    });
+  }
+
+  function populateFilterOptions() {
+    var vehicles = DataManager.getVehicles();
     var types = {};
     vehicles.forEach(function(v) { if (v.vehicleType) types[v.vehicleType] = true; });
-    orders.forEach(function(o) { if (o.requestedType) types[o.requestedType] = true; });
-    var typeSelect = document.getElementById('ganttFilterVehicleType');
-    var currentType = typeSelect.value;
+
+    var typeSelect = document.getElementById('scheduleVehicleType');
+    var currentVal = typeSelect.value;
     while (typeSelect.options.length > 1) typeSelect.remove(1);
     Object.keys(types).sort().forEach(function(t) {
       typeSelect.add(new Option(t, t));
     });
-    typeSelect.value = currentType;
-
-    var shippers = {};
-    orders.forEach(function(o) { if (o.shipper) shippers[o.shipper] = true; });
-    var shipperSelect = document.getElementById('ganttFilterShipper');
-    var currentShipper = shipperSelect.value;
-    while (shipperSelect.options.length > 1) shipperSelect.remove(1);
-    Object.keys(shippers).sort().forEach(function(s) {
-      shipperSelect.add(new Option(s, s));
-    });
-    shipperSelect.value = currentShipper;
-  }
-
-  function setupGanttFilters() {
-    document.getElementById('ganttFilterVehicleType').addEventListener('change', function() {
-      ganttFilters.vehicleType = this.value;
-      refresh();
-    });
-    document.getElementById('ganttFilterDate').addEventListener('change', function() {
-      ganttFilters.date = this.value;
-      refresh();
-    });
-    document.getElementById('ganttFilterShipper').addEventListener('change', function() {
-      ganttFilters.shipper = this.value;
-      refresh();
-    });
-    document.getElementById('clearGanttFilter').addEventListener('click', function() {
-      ganttFilters.vehicleType = '';
-      ganttFilters.date = '';
-      ganttFilters.shipper = '';
-      document.getElementById('ganttFilterVehicleType').value = '';
-      document.getElementById('ganttFilterDate').value = '';
-      document.getElementById('ganttFilterShipper').value = '';
-      refresh();
-    });
-  }
-
-  function getStatusClass(status) {
-    switch (status) {
-      case STATUS.ASSIGNED: return 'status-assigned';
-      case STATUS.EN_ROUTE: return 'status-enroute';
-      case STATUS.COMPLETED: return 'status-completed';
-      default: return 'status-unassigned';
-    }
-  }
-
-  function getStatusBadgeClass(status) {
-    switch (status) {
-      case STATUS.ASSIGNED: return 'assigned';
-      case STATUS.EN_ROUTE: return 'enroute';
-      case STATUS.COMPLETED: return 'completed';
-      default: return 'unassigned';
-    }
-  }
-
-  /**
-   * YYYY-MM-DD形式の日付文字列かどうかを検証
-   */
-  function isValidDateStr(s) {
-    return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
-  }
-
-  function mapOrdersToGanttTasks(orders) {
-    return orders
-      .filter(function(order) {
-        // 積込日が無い受注はガントに表示できない
-        return isValidDateStr(order.loadDate);
-      })
-      .map(function(order) {
-        var startDate = order.loadDate;
-        var startTime = order.loadTime || '00:00';
-
-        // 荷卸日が無い場合は積込日と同日とする
-        var endDate = isValidDateStr(order.unloadDate) ? order.unloadDate : startDate;
-        var endTime = order.unloadTime || '23:59';
-
-        // 終了が開始より前の場合は同日に補正
-        if (endDate < startDate) {
-          endDate = startDate;
-        }
-
-        // 同日かつ終了時間が開始時間以前の場合は終了を+1時間に補正
-        if (endDate === startDate && endTime <= startTime) {
-          var parts = startTime.split(':');
-          var h = (parseInt(parts[0], 10) + 1) % 24;
-          endTime = ('0' + h).slice(-2) + ':' + parts[1];
-        }
-
-        // バー表示名: 割当済なら車番も表示
-        var displayName = order.shipper + ' - ' + order.cargoName;
-        if (order.vehicleNumber) {
-          displayName = '[' + order.vehicleNumber + '] ' + displayName;
-        }
-
-        return {
-          id: order.requestId,
-          name: displayName,
-          start: startDate + ' ' + startTime + ':00',
-          end: endDate + ' ' + endTime + ':00',
-          progress: order.status === STATUS.COMPLETED ? 100 : (order.status === STATUS.EN_ROUTE ? 50 : 0),
-          custom_class: getStatusClass(order.status),
-          dependencies: ''
-        };
-      });
-  }
-
-  /**
-   * Frappe Ganttポップアップ用HTML (ライブラリAPIが文字列を要求)
-   * 全動的値はescapeHtmlで無害化
-   */
-  function buildPopupHtml(task) {
-    var order = DataManager.getOrderById(task.id);
-    if (!order) return '';
-    var loadLoc = [order.loadLocation1, order.loadLocation2].filter(Boolean).join(' ');
-    var unloadLoc = [order.unloadLocation1, order.unloadLocation2].filter(Boolean).join(' ');
-    var parts = [
-      '<div class="p-2" style="min-width:220px">',
-      '<h6 class="mb-1">', escapeHtml(order.shipper), '</h6>',
-      '<p class="mb-1 small">', escapeHtml(order.cargoName), '</p>',
-      '<p class="mb-1 small text-muted">',
-        escapeHtml(loadLoc), ' → ', escapeHtml(unloadLoc),
-      '</p>'
-    ];
-    if (order.driverName) {
-      parts.push('<p class="mb-0 small"><strong>運転手:</strong> ', escapeHtml(order.driverName), '</p>');
-    }
-    if (order.vehicleNumber) {
-      parts.push('<p class="mb-0 small"><strong>車番:</strong> ', escapeHtml(order.vehicleNumber), '</p>');
-    }
-    parts.push(
-      '<span class="badge status-badge-', getStatusBadgeClass(order.status), '">',
-      escapeHtml(order.status), '</span>',
-      '</div>'
-    );
-    return parts.join('');
-  }
-
-  function init() {
-    // フィルター適用済み受注をガントチャートに表示
-    var allOrders = getFilteredOrders();
-    var ganttEl = document.getElementById('gantt');
-    var emptyEl = document.getElementById('ganttEmpty');
-
-    var tasks = mapOrdersToGanttTasks(allOrders);
-
-    if (tasks.length === 0) {
-      ganttEl.style.display = 'none';
-      emptyEl.style.display = 'block';
-      return;
-    }
-
-    ganttEl.style.display = 'block';
-    emptyEl.style.display = 'none';
-
-    gantt = new Gantt('#gantt', tasks, {
-      view_mode: currentViewMode,
-      date_format: 'YYYY-MM-DD HH:mm:ss',
-      bar_height: 30,
-      bar_corner_radius: 4,
-      arrow_curve: 5,
-      padding: 18,
-      popup_trigger: 'click',
-      custom_popup_html: buildPopupHtml,
-
-      on_click: function(task) {
-        UIManager.showTaskDetailsModal(DataManager.getOrderById(task.id));
-      },
-
-      on_date_change: function(task, start, end) {
-        handleDateChange(task, start, end);
-      }
-    });
-
-    setupContextMenu();
-    japanifyGantt();
-  }
-
-  function handleDateChange(task, start, end) {
-    var formatDT = function(d) {
-      var dt = new Date(d);
-      var y = dt.getFullYear();
-      var mo = ('0' + (dt.getMonth() + 1)).slice(-2);
-      var da = ('0' + dt.getDate()).slice(-2);
-      var h = ('0' + dt.getHours()).slice(-2);
-      var mi = ('0' + dt.getMinutes()).slice(-2);
-      return { date: y + '-' + mo + '-' + da, time: h + ':' + mi };
-    };
-
-    var s = formatDT(start);
-    var e = formatDT(end);
-
-    DataManager.updateOrder(task.id, {
-      loadDate: s.date,
-      loadTime: s.time,
-      unloadDate: e.date,
-      unloadTime: e.time
-    })
-    .then(function() {
-      UIManager.showToast('日程を更新しました。', 'success');
-    })
-    .catch(function(err) {
-      UIManager.showToast('日程更新に失敗: ' + err.message, 'danger');
-      refresh();
-    });
+    typeSelect.value = currentVal;
   }
 
   function setupContextMenu() {
-    var ganttEl = document.getElementById('gantt');
+    var body = document.getElementById('scheduleBody');
     var menu = document.getElementById('customContextMenu');
-    var selectedTaskId = null;
+    var selectedOrderId = null;
 
-    ganttEl.addEventListener('contextmenu', function(e) {
-      var bar = e.target.closest('.bar-wrapper');
+    body.addEventListener('contextmenu', function(e) {
+      var bar = e.target.closest('.schedule-bar');
       if (!bar) return;
       e.preventDefault();
 
-      var taskId = bar.getAttribute('data-id');
-      if (!taskId) return;
-
-      selectedTaskId = taskId;
+      selectedOrderId = bar.getAttribute('data-order-id');
       menu.style.left = e.clientX + 'px';
       menu.style.top = e.clientY + 'px';
       menu.style.display = 'block';
@@ -491,14 +454,14 @@ var GanttManager = (function() {
     });
 
     document.getElementById('ctxEdit').addEventListener('click', function() {
-      if (selectedTaskId) {
-        UIManager.showTaskDetailsModal(DataManager.getOrderById(selectedTaskId));
+      if (selectedOrderId) {
+        UIManager.showTaskDetailsModal(DataManager.getOrderById(selectedOrderId));
       }
     });
 
     document.getElementById('ctxUnassign').addEventListener('click', function() {
-      if (!selectedTaskId) return;
-      DataManager.updateOrder(selectedTaskId, {
+      if (!selectedOrderId) return;
+      DataManager.updateOrder(selectedOrderId, {
         number: '',
         status: STATUS.UNASSIGNED
       }).then(function() {
@@ -509,60 +472,53 @@ var GanttManager = (function() {
     });
   }
 
-  function refresh() {
-    var allOrders = getFilteredOrders();
-    var ganttEl = document.getElementById('gantt');
-    var emptyEl = document.getElementById('ganttEmpty');
+  function setup() {
+    var today = getTodayStr();
+    selectedDate = today;
+    document.getElementById('scheduleDate').value = today;
+    // サイドバーも同日に同期
+    document.getElementById('filterLoadDate').value = today;
 
-    var tasks = mapOrdersToGanttTasks(allOrders);
+    document.getElementById('scheduleDate').addEventListener('change', function() {
+      setDate(this.value);
+    });
 
-    if (tasks.length === 0) {
-      DOM.clear(ganttEl);
-      ganttEl.style.display = 'none';
-      emptyEl.style.display = 'block';
-      gantt = null;
-      return;
-    }
+    document.getElementById('scheduleVehicleType').addEventListener('change', function() {
+      vehicleTypeFilter = this.value;
+      render();
+    });
 
-    ganttEl.style.display = 'block';
-    emptyEl.style.display = 'none';
+    document.getElementById('schedulePrevDay').addEventListener('click', function() {
+      var d = new Date(getSelectedDate());
+      d.setDate(d.getDate() - 1);
+      setDate(formatDateStr(d));
+    });
 
-    if (gantt) {
-      try {
-        gantt.refresh(tasks);
-        japanifyGantt();
-      } catch (e) {
-        // refresh失敗時はGanttを再生成
-        console.warn('Gantt refresh failed, reinitializing:', e.message);
-        DOM.clear(ganttEl);
-        gantt = null;
-        init();
-      }
-    } else {
-      init();
-    }
-  }
+    document.getElementById('scheduleNextDay').addEventListener('click', function() {
+      var d = new Date(getSelectedDate());
+      d.setDate(d.getDate() + 1);
+      setDate(formatDateStr(d));
+    });
 
-  function changeViewMode(mode) {
-    currentViewMode = mode;
-    if (gantt) {
-      gantt.change_view_mode(mode);
-      japanifyGantt();
-    }
+    document.getElementById('scheduleToday').addEventListener('click', function() {
+      setDate(getTodayStr());
+    });
+
+    setupContextMenu();
+    populateFilterOptions();
   }
 
   return {
-    init: init,
-    refresh: refresh,
-    changeViewMode: changeViewMode,
-    setupGanttFilters: setupGanttFilters,
-    populateGanttFilterOptions: populateGanttFilterOptions
+    render: render,
+    setup: setup,
+    populateFilterOptions: populateFilterOptions,
+    getSelectedDate: getSelectedDate
   };
 })();
 
 
 /* ========================================================
- * UIManager - サイドバー、ドラッグ&ドロップ、モーダル、Toast
+ * UIManager - サイドバー、モーダル、Toast
  * ======================================================== */
 var UIManager = (function() {
   var draggedOrderId = null;
@@ -570,6 +526,11 @@ var UIManager = (function() {
     requestedType: '',
     loadDate: ''
   };
+
+  function syncSidebarDate(dateStr) {
+    sidebarFilters.loadDate = dateStr;
+    renderUnassignedPool();
+  }
 
   function getFilteredUnassignedOrders() {
     var unassigned = DataManager.getUnassignedOrders();
@@ -627,7 +588,7 @@ var UIManager = (function() {
 
     if (unassigned.length === 0) {
       pool.appendChild(
-        DOM.el('p', { className: 'text-muted small', textContent: '全ての受注が割当済みです。' })
+        DOM.el('p', { className: 'text-muted small', textContent: '未割当の受注はありません。' })
       );
       return;
     }
@@ -668,69 +629,6 @@ var UIManager = (function() {
       });
 
       pool.appendChild(card);
-    });
-  }
-
-  function setupDragDrop() {
-    var dropZone = document.getElementById('ganttDropZone');
-
-    dropZone.addEventListener('dragover', function(e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      dropZone.classList.add('drag-over');
-    });
-
-    dropZone.addEventListener('dragleave', function() {
-      dropZone.classList.remove('drag-over');
-    });
-
-    dropZone.addEventListener('drop', function(e) {
-      e.preventDefault();
-      dropZone.classList.remove('drag-over');
-
-      var orderId = e.dataTransfer.getData('text/plain');
-      if (!orderId) return;
-
-      showVehicleSelectModal(orderId);
-    });
-  }
-
-  function showVehicleSelectModal(orderId) {
-    var vehicles = DataManager.getVehicles();
-    var list = document.getElementById('vehicleSelectList');
-    DOM.clear(list);
-
-    vehicles.forEach(function(v) {
-      var item = DOM.el('button', { className: 'list-group-item list-group-item-action' }, [
-        DOM.el('div', { className: 'd-flex justify-content-between align-items-center' }, [
-          DOM.el('div', {}, [
-            DOM.el('strong', { textContent: v.number }),
-            DOM.el('small', { className: 'text-muted ms-2', textContent: v.vehicleType })
-          ]),
-          DOM.el('small', { textContent: v.driverName })
-        ])
-      ]);
-
-      item.addEventListener('click', function() {
-        assignOrderToVehicle(orderId, v.number);
-        bootstrap.Modal.getInstance(document.getElementById('vehicleSelectModal')).hide();
-      });
-
-      list.appendChild(item);
-    });
-
-    var modal = new bootstrap.Modal(document.getElementById('vehicleSelectModal'));
-    modal.show();
-  }
-
-  function assignOrderToVehicle(orderId, vehicleNumber) {
-    DataManager.updateOrder(orderId, {
-      number: vehicleNumber,
-      status: STATUS.ASSIGNED
-    }).then(function() {
-      showToast('受注を車両に割り当てました。', 'success');
-    }).catch(function(err) {
-      showToast('割当に失敗: ' + err.message, 'danger');
     });
   }
 
@@ -867,12 +765,11 @@ var UIManager = (function() {
 
   return {
     renderUnassignedPool: renderUnassignedPool,
-    setupDragDrop: setupDragDrop,
     setupSidebarFilters: setupSidebarFilters,
+    syncSidebarDate: syncSidebarDate,
     showTaskDetailsModal: showTaskDetailsModal,
     showToast: showToast,
-    setupCSVImport: setupCSVImport,
-    showVehicleSelectModal: showVehicleSelectModal
+    setupCSVImport: setupCSVImport
   };
 })();
 
@@ -990,7 +887,6 @@ var StatusManager = (function() {
         return o.status === STATUS.UNASSIGNED || !o.status;
       }).length;
 
-      // アコーディオンヘッダー
       var headerBtn = DOM.el('button', {
         className: 'accordion-button' + (index > 0 ? ' collapsed' : ''),
         type: 'button',
@@ -1006,7 +902,6 @@ var StatusManager = (function() {
 
       var header = DOM.el('h2', { className: 'accordion-header' }, [headerBtn]);
 
-      // アコーディオンボディ
       var bodyInner = DOM.el('div', { className: 'accordion-body p-0' });
 
       items.forEach(function(order) {
@@ -1014,14 +909,12 @@ var StatusManager = (function() {
         var unloadLoc = [order.unloadLocation1, order.unloadLocation2].filter(Boolean).join(' ');
         var orderStatus = order.status || STATUS.UNASSIGNED;
 
-        // 編集ボタン
         var editBtn = DOM.el('button', {
           className: 'btn btn-outline-primary btn-sm me-1',
           textContent: '編集',
           title: '受注を編集'
         });
 
-        // 解除ボタン (未割当以外のみ表示)
         var unassignBtn = null;
         if (orderStatus !== STATUS.UNASSIGNED) {
           unassignBtn = DOM.el('button', {
@@ -1034,7 +927,6 @@ var StatusManager = (function() {
         var actionsChildren = [editBtn];
         if (unassignBtn) actionsChildren.push(unassignBtn);
 
-        // ドライバー情報行
         var driverInfo = null;
         if (order.driverName) {
           driverInfo = DOM.el('div', { className: 'small' }, [
@@ -1075,7 +967,6 @@ var StatusManager = (function() {
           DOM.el('div', { className: 'order-actions' }, actionsChildren)
         ]);
 
-        // イベントリスナー
         editBtn.addEventListener('click', function() {
           showEditModal(order);
         });
@@ -1214,25 +1105,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
   DataManager.loadData()
     .then(function() {
-      // 初回初期化 (Observer登録前に実施)
-      GanttManager.init();
-      GanttManager.setupGanttFilters();
-      GanttManager.populateGanttFilterOptions();
+      // 初回初期化
+      ScheduleManager.setup();
+      ScheduleManager.render();
       UIManager.renderUnassignedPool();
-      UIManager.setupDragDrop();
       UIManager.setupSidebarFilters();
       UIManager.setupCSVImport();
       StatusManager.setup();
 
-      // 初期化完了後にObserverを登録 (以降のデータ更新でUI自動更新)
+      // Observer登録: データ更新時に全UIを自動更新
       DataManager.subscribe(function() {
+        ScheduleManager.render();
+        ScheduleManager.populateFilterOptions();
         UIManager.renderUnassignedPool();
-        try {
-          GanttManager.refresh();
-        } catch (e) {
-          console.warn('Gantt refresh error in observer:', e.message);
-        }
-        GanttManager.populateGanttFilterOptions();
         if (document.getElementById('viewStatus').style.display !== 'none') {
           StatusManager.render();
         }
@@ -1257,12 +1142,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
 
-  document.querySelectorAll('input[name="viewMode"]').forEach(function(radio) {
-    radio.addEventListener('change', function() {
-      GanttManager.changeViewMode(this.value);
-    });
-  });
-
   // タブ切替
   document.querySelectorAll('#mainTabs .nav-link').forEach(function(tab) {
     tab.addEventListener('click', function() {
@@ -1275,8 +1154,8 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('viewGantt').style.display = view === 'gantt' ? '' : 'none';
       document.getElementById('viewStatus').style.display = view === 'status' ? '' : 'none';
 
-      var ganttControls = document.getElementById('ganttNavControls');
-      if (ganttControls) ganttControls.style.display = view === 'gantt' ? '' : 'none';
+      var navControls = document.getElementById('ganttNavControls');
+      if (navControls) navControls.style.display = view === 'gantt' ? '' : 'none';
 
       if (view === 'status') {
         StatusManager.render();
