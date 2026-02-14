@@ -1,0 +1,724 @@
+<script>
+/**
+ * KUBOXT Dispatch Planner - Client-Side Logic
+ * Modules: DataManager, GanttManager, UIManager
+ */
+
+/* ========================================================
+ * DataManager - Data state management with Observer pattern
+ * ======================================================== */
+var DataManager = (function() {
+  var orders = [];
+  var vehicles = [];
+  var observers = [];
+
+  function subscribe(fn) {
+    observers.push(fn);
+  }
+
+  function notifyObservers() {
+    observers.forEach(function(fn) { fn(); });
+  }
+
+  /**
+   * Call server function and return a Promise
+   */
+  function callServer(fnName) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function(resolve, reject) {
+      var runner = google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject);
+      runner[fnName].apply(runner, args);
+    });
+  }
+
+  function loadData() {
+    return callServer('getData').then(function(result) {
+      if (!result.success) {
+        throw new Error(result.error || 'データの取得に失敗しました。');
+      }
+      orders = result.orders || [];
+      vehicles = result.vehicles || [];
+      notifyObservers();
+      return result;
+    });
+  }
+
+  function getOrders() { return orders; }
+  function getVehicles() { return vehicles; }
+
+  function getUnassignedOrders() {
+    return orders.filter(function(o) { return o.status === 'Unassigned'; });
+  }
+
+  function getAssignedOrders() {
+    return orders.filter(function(o) { return o.status !== 'Unassigned'; });
+  }
+
+  function getOrderById(requestId) {
+    for (var i = 0; i < orders.length; i++) {
+      if (orders[i].requestId === requestId) return orders[i];
+    }
+    return null;
+  }
+
+  /**
+   * Optimistic update: modify local state immediately, sync to server.
+   * On failure, rollback and notify.
+   */
+  function updateOrder(orderId, updates) {
+    var order = getOrderById(orderId);
+    if (!order) return Promise.reject(new Error('Order not found'));
+
+    // Save snapshot for rollback
+    var snapshot = JSON.parse(JSON.stringify(order));
+
+    // Optimistic local update
+    Object.keys(updates).forEach(function(key) {
+      order[key] = updates[key];
+    });
+
+    // Auto-fill vehicle info if truckId changed
+    if (updates.truckId) {
+      var vehicle = getVehicleById(updates.truckId);
+      if (vehicle) {
+        order.vehicleNumber = vehicle.vehicleNumber;
+        order.vehicleType = vehicle.vehicleType;
+        order.driverName = vehicle.driverName;
+      }
+    } else if (updates.truckId === '') {
+      order.vehicleNumber = '';
+      order.vehicleType = '';
+      order.driverName = '';
+    }
+
+    notifyObservers();
+
+    // Server sync
+    return callServer('updateOrder', orderId, updates)
+      .then(function(result) {
+        if (result && !result.success) {
+          throw new Error(result.error || 'Update failed');
+        }
+        return result;
+      })
+      .catch(function(err) {
+        // Rollback on failure
+        Object.keys(snapshot).forEach(function(key) {
+          order[key] = snapshot[key];
+        });
+        notifyObservers();
+        throw err;
+      });
+  }
+
+  function getVehicleById(truckId) {
+    for (var i = 0; i < vehicles.length; i++) {
+      if (vehicles[i].truckId === truckId) return vehicles[i];
+    }
+    return null;
+  }
+
+  return {
+    loadData: loadData,
+    getOrders: getOrders,
+    getVehicles: getVehicles,
+    getUnassignedOrders: getUnassignedOrders,
+    getAssignedOrders: getAssignedOrders,
+    getOrderById: getOrderById,
+    getVehicleById: getVehicleById,
+    updateOrder: updateOrder,
+    subscribe: subscribe,
+    callServer: callServer
+  };
+})();
+
+
+/* ========================================================
+ * DOM Helper - Safe element creation (no innerHTML)
+ * ======================================================== */
+var DOM = {
+  /**
+   * Create an element with attributes and children
+   * @param {string} tag
+   * @param {Object} attrs - { className, textContent, ... }
+   * @param {Array} children - child elements or strings
+   */
+  el: function(tag, attrs, children) {
+    var el = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function(key) {
+        if (key === 'className') {
+          el.className = attrs[key];
+        } else if (key === 'textContent') {
+          el.textContent = attrs[key];
+        } else if (key === 'style' && typeof attrs[key] === 'object') {
+          Object.keys(attrs[key]).forEach(function(prop) {
+            el.style[prop] = attrs[key][prop];
+          });
+        } else {
+          el.setAttribute(key, attrs[key]);
+        }
+      });
+    }
+    if (children) {
+      children.forEach(function(child) {
+        if (typeof child === 'string') {
+          el.appendChild(document.createTextNode(child));
+        } else if (child) {
+          el.appendChild(child);
+        }
+      });
+    }
+    return el;
+  },
+
+  clear: function(el) {
+    while (el.firstChild) {
+      el.removeChild(el.firstChild);
+    }
+  }
+};
+
+
+/* ========================================================
+ * GanttManager - Frappe Gantt initialization and events
+ * ======================================================== */
+var GanttManager = (function() {
+  var gantt = null;
+  var currentViewMode = 'Week';
+
+  function getStatusClass(status) {
+    switch (status) {
+      case 'Assigned': return 'status-assigned';
+      case 'En Route': return 'status-enroute';
+      case 'Completed': return 'status-completed';
+      default: return 'status-unassigned';
+    }
+  }
+
+  function getStatusBadgeClass(status) {
+    switch (status) {
+      case 'Assigned': return 'assigned';
+      case 'En Route': return 'enroute';
+      case 'Completed': return 'completed';
+      default: return 'unassigned';
+    }
+  }
+
+  function mapOrdersToGanttTasks(orders) {
+    return orders.map(function(order) {
+      var startStr = order.loadDate + (order.loadTime ? ' ' + order.loadTime : ' 00:00');
+      var endStr = order.unloadDate + (order.unloadTime ? ' ' + order.unloadTime : ' 23:59');
+
+      // Ensure end is after start
+      if (!order.unloadDate || order.unloadDate < order.loadDate) {
+        endStr = order.loadDate + (order.unloadTime ? ' ' + order.unloadTime : ' 23:59');
+      }
+
+      return {
+        id: order.requestId,
+        name: order.shipper + ' - ' + order.cargoName,
+        start: startStr,
+        end: endStr,
+        progress: order.status === 'Completed' ? 100 : (order.status === 'En Route' ? 50 : 0),
+        custom_class: getStatusClass(order.status),
+        dependencies: ''
+      };
+    });
+  }
+
+  /**
+   * Build popup HTML for Frappe Gantt (library requires HTML string return).
+   * All user data is escaped via textContent-based escapeHtml.
+   */
+  function buildPopupHtml(task) {
+    var order = DataManager.getOrderById(task.id);
+    if (!order) return '';
+    // Frappe Gantt API requires returning an HTML string for custom_popup_html.
+    // All dynamic values are escaped via escapeHtml to prevent XSS.
+    var parts = [
+      '<div class="p-2" style="min-width:200px">',
+      '<h6 class="mb-1">', escapeHtml(order.shipper), '</h6>',
+      '<p class="mb-1 small">', escapeHtml(order.cargoName), '</p>',
+      '<p class="mb-1 small text-muted">',
+        escapeHtml(order.loadLocation), ' → ', escapeHtml(order.unloadLocation),
+      '</p>'
+    ];
+    if (order.driverName) {
+      parts.push('<p class="mb-0 small"><strong>運転手:</strong> ', escapeHtml(order.driverName), '</p>');
+    }
+    parts.push(
+      '<span class="badge status-badge-', getStatusBadgeClass(order.status), '">',
+      escapeHtml(order.status), '</span>',
+      '</div>'
+    );
+    return parts.join('');
+  }
+
+  function init() {
+    var assigned = DataManager.getAssignedOrders();
+    var ganttEl = document.getElementById('gantt');
+    var emptyEl = document.getElementById('ganttEmpty');
+
+    if (assigned.length === 0) {
+      ganttEl.style.display = 'none';
+      emptyEl.style.display = 'block';
+      return;
+    }
+
+    ganttEl.style.display = 'block';
+    emptyEl.style.display = 'none';
+
+    var tasks = mapOrdersToGanttTasks(assigned);
+
+    gantt = new Gantt('#gantt', tasks, {
+      view_mode: currentViewMode,
+      date_format: 'YYYY-MM-DD HH:mm',
+      bar_height: 30,
+      bar_corner_radius: 4,
+      arrow_curve: 5,
+      padding: 18,
+      popup_trigger: 'click',
+      language: 'ja',
+      custom_popup_html: buildPopupHtml,
+
+      on_click: function(task) {
+        UIManager.showTaskDetailsModal(DataManager.getOrderById(task.id));
+      },
+
+      on_date_change: function(task, start, end) {
+        handleDateChange(task, start, end);
+      }
+    });
+
+    setupContextMenu();
+  }
+
+  function handleDateChange(task, start, end) {
+    var formatDT = function(d) {
+      var dt = new Date(d);
+      var y = dt.getFullYear();
+      var mo = ('0' + (dt.getMonth() + 1)).slice(-2);
+      var da = ('0' + dt.getDate()).slice(-2);
+      var h = ('0' + dt.getHours()).slice(-2);
+      var mi = ('0' + dt.getMinutes()).slice(-2);
+      return { date: y + '-' + mo + '-' + da, time: h + ':' + mi };
+    };
+
+    var s = formatDT(start);
+    var e = formatDT(end);
+
+    var updates = {
+      loadDate: s.date,
+      loadTime: s.time,
+      unloadDate: e.date,
+      unloadTime: e.time
+    };
+
+    DataManager.updateOrder(task.id, updates)
+      .then(function() {
+        UIManager.showToast('日程を更新しました。', 'success');
+      })
+      .catch(function(err) {
+        UIManager.showToast('日程更新に失敗: ' + err.message, 'danger');
+        refresh();
+      });
+  }
+
+  function setupContextMenu() {
+    var ganttEl = document.getElementById('gantt');
+    var menu = document.getElementById('customContextMenu');
+    var selectedTaskId = null;
+
+    ganttEl.addEventListener('contextmenu', function(e) {
+      var bar = e.target.closest('.bar-wrapper');
+      if (!bar) return;
+      e.preventDefault();
+
+      var taskId = bar.getAttribute('data-id');
+      if (!taskId) return;
+
+      selectedTaskId = taskId;
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+      menu.style.display = 'block';
+    });
+
+    document.addEventListener('click', function() {
+      menu.style.display = 'none';
+    });
+
+    document.getElementById('ctxEdit').addEventListener('click', function() {
+      if (selectedTaskId) {
+        UIManager.showTaskDetailsModal(DataManager.getOrderById(selectedTaskId));
+      }
+    });
+
+    document.getElementById('ctxUnassign').addEventListener('click', function() {
+      if (!selectedTaskId) return;
+      DataManager.updateOrder(selectedTaskId, {
+        truckId: '',
+        status: 'Unassigned'
+      }).then(function() {
+        UIManager.showToast('割当を解除しました。', 'info');
+      }).catch(function(err) {
+        UIManager.showToast('割当解除に失敗: ' + err.message, 'danger');
+      });
+    });
+  }
+
+  function refresh() {
+    var assigned = DataManager.getAssignedOrders();
+    var ganttEl = document.getElementById('gantt');
+    var emptyEl = document.getElementById('ganttEmpty');
+
+    if (assigned.length === 0) {
+      DOM.clear(ganttEl);
+      ganttEl.style.display = 'none';
+      emptyEl.style.display = 'block';
+      gantt = null;
+      return;
+    }
+
+    ganttEl.style.display = 'block';
+    emptyEl.style.display = 'none';
+
+    var tasks = mapOrdersToGanttTasks(assigned);
+
+    if (gantt) {
+      gantt.refresh(tasks);
+    } else {
+      init();
+    }
+  }
+
+  function changeViewMode(mode) {
+    currentViewMode = mode;
+    if (gantt) {
+      gantt.change_view_mode(mode);
+    }
+  }
+
+  return {
+    init: init,
+    refresh: refresh,
+    changeViewMode: changeViewMode
+  };
+})();
+
+
+/* ========================================================
+ * UIManager - Sidebar, Drag & Drop, Modals, Toasts
+ * ======================================================== */
+var UIManager = (function() {
+  var draggedOrderId = null;
+
+  function renderUnassignedPool() {
+    var pool = document.getElementById('unassignedPool');
+    var countBadge = document.getElementById('unassignedCount');
+    var unassigned = DataManager.getUnassignedOrders();
+
+    countBadge.textContent = unassigned.length;
+    DOM.clear(pool);
+
+    if (unassigned.length === 0) {
+      pool.appendChild(
+        DOM.el('p', { className: 'text-muted small', textContent: '全ての受注が割当済みです。' })
+      );
+      return;
+    }
+
+    unassigned.forEach(function(order) {
+      var card = DOM.el('div', {
+        className: 'card order-card',
+        draggable: 'true',
+        'data-order-id': order.requestId
+      }, [
+        DOM.el('div', { className: 'card-body py-2 px-3' }, [
+          DOM.el('div', { className: 'card-title mb-1', textContent: order.shipper }),
+          DOM.el('p', { className: 'card-text mb-1', textContent: order.cargoName }),
+          DOM.el('p', { className: 'card-text' }, [
+            DOM.el('small', { textContent: order.loadDate + ' ' + (order.loadTime || '') }),
+            document.createElement('br'),
+            DOM.el('small', { textContent: order.loadLocation + ' → ' + order.unloadLocation })
+          ])
+        ])
+      ]);
+
+      card.addEventListener('dragstart', function(e) {
+        draggedOrderId = order.requestId;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', order.requestId);
+      });
+
+      card.addEventListener('dragend', function() {
+        card.classList.remove('dragging');
+        draggedOrderId = null;
+      });
+
+      pool.appendChild(card);
+    });
+  }
+
+  function setupDragDrop() {
+    var dropZone = document.getElementById('ganttDropZone');
+
+    dropZone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', function() {
+      dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+
+      var orderId = e.dataTransfer.getData('text/plain');
+      if (!orderId) return;
+
+      showVehicleSelectModal(orderId);
+    });
+  }
+
+  function showVehicleSelectModal(orderId) {
+    var vehicles = DataManager.getVehicles();
+    var list = document.getElementById('vehicleSelectList');
+    DOM.clear(list);
+
+    vehicles.forEach(function(v) {
+      var item = DOM.el('button', { className: 'list-group-item list-group-item-action' }, [
+        DOM.el('div', { className: 'd-flex justify-content-between align-items-center' }, [
+          DOM.el('div', {}, [
+            DOM.el('strong', { textContent: v.vehicleNumber }),
+            DOM.el('small', { className: 'text-muted ms-2', textContent: v.vehicleType })
+          ]),
+          DOM.el('small', { textContent: v.driverName })
+        ])
+      ]);
+
+      item.addEventListener('click', function() {
+        assignOrderToVehicle(orderId, v.truckId);
+        bootstrap.Modal.getInstance(document.getElementById('vehicleSelectModal')).hide();
+      });
+
+      list.appendChild(item);
+    });
+
+    var modal = new bootstrap.Modal(document.getElementById('vehicleSelectModal'));
+    modal.show();
+  }
+
+  function assignOrderToVehicle(orderId, truckId) {
+    DataManager.updateOrder(orderId, {
+      truckId: truckId,
+      status: 'Assigned'
+    }).then(function() {
+      showToast('受注を車両に割り当てました。', 'success');
+    }).catch(function(err) {
+      showToast('割当に失敗: ' + err.message, 'danger');
+    });
+  }
+
+  function showTaskDetailsModal(order) {
+    if (!order) return;
+    var body = document.getElementById('taskDetailsBody');
+    DOM.clear(body);
+
+    var fields = [
+      ['依頼ID', order.requestId],
+      ['受付日', order.receivedDate],
+      ['荷主', order.shipper],
+      ['積込日時', order.loadDate + ' ' + (order.loadTime || '')],
+      ['積込場所', order.loadLocation],
+      ['荷卸日時', order.unloadDate + ' ' + (order.unloadTime || '')],
+      ['荷卸場所', order.unloadLocation],
+      ['品名', order.cargoName],
+      ['数量', order.quantity],
+      ['備考', order.notes],
+      ['車番', order.vehicleNumber],
+      ['車種', order.vehicleType],
+      ['運転手', order.driverName],
+      ['ステータス', order.status]
+    ];
+
+    var table = DOM.el('table', { className: 'table table-sm' });
+    var tbody = document.createElement('tbody');
+    fields.forEach(function(field) {
+      var tr = DOM.el('tr', {}, [
+        DOM.el('th', { style: { width: '30%' }, textContent: field[0] }),
+        DOM.el('td', { textContent: field[1] || '' })
+      ]);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    body.appendChild(table);
+
+    var modal = new bootstrap.Modal(document.getElementById('taskDetailsModal'));
+    modal.show();
+  }
+
+  function showToast(message, type) {
+    type = type || 'info';
+    var container = document.getElementById('toastContainer');
+
+    var closeBtn = DOM.el('button', {
+      type: 'button',
+      className: 'btn-close btn-close-white me-2 m-auto',
+      'data-bs-dismiss': 'toast'
+    });
+
+    var toastEl = DOM.el('div', {
+      className: 'toast align-items-center text-bg-' + type + ' border-0',
+      role: 'alert'
+    }, [
+      DOM.el('div', { className: 'd-flex' }, [
+        DOM.el('div', { className: 'toast-body', textContent: message }),
+        closeBtn
+      ])
+    ]);
+
+    container.appendChild(toastEl);
+    var toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+    toast.show();
+
+    toastEl.addEventListener('hidden.bs.toast', function() {
+      toastEl.remove();
+    });
+  }
+
+  function setupCSVImport() {
+    var fileInput = document.getElementById('csvFileInput');
+    var importBtn = document.getElementById('csvImportBtn');
+    var preview = document.getElementById('csvPreview');
+    var previewInfo = document.getElementById('csvPreviewInfo');
+    var progress = document.getElementById('csvImportProgress');
+    var csvContent = null;
+
+    fileInput.addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (!file) {
+        importBtn.disabled = true;
+        preview.style.display = 'none';
+        return;
+      }
+
+      var reader = new FileReader();
+      reader.onload = function(event) {
+        csvContent = event.target.result;
+        var lines = csvContent.split('\n').filter(function(l) { return l.trim(); });
+        previewInfo.textContent = lines.length + ' 行を検出 (ヘッダー含む)';
+        preview.style.display = 'block';
+        importBtn.disabled = false;
+      };
+      reader.readAsText(file, 'UTF-8');
+    });
+
+    importBtn.addEventListener('click', function() {
+      if (!csvContent) return;
+      importBtn.disabled = true;
+      progress.style.display = 'block';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          progress.style.display = 'none';
+          bootstrap.Modal.getInstance(document.getElementById('csvImportModal')).hide();
+
+          if (result.success) {
+            showToast(result.imported + ' 件インポートしました。', 'success');
+            if (result.warnings && result.warnings.length > 0) {
+              showToast('警告: ' + result.warnings.length + ' 件のエラー行', 'warning');
+            }
+            DataManager.loadData();
+          } else {
+            showToast('インポート失敗: ' + (result.error || '不明なエラー'), 'danger');
+            importBtn.disabled = false;
+          }
+
+          fileInput.value = '';
+          csvContent = null;
+          preview.style.display = 'none';
+        })
+        .withFailureHandler(function(err) {
+          progress.style.display = 'none';
+          showToast('インポートエラー: ' + err.message, 'danger');
+          importBtn.disabled = false;
+        })
+        .importCSV(csvContent);
+    });
+  }
+
+  return {
+    renderUnassignedPool: renderUnassignedPool,
+    setupDragDrop: setupDragDrop,
+    showTaskDetailsModal: showTaskDetailsModal,
+    showToast: showToast,
+    setupCSVImport: setupCSVImport,
+    showVehicleSelectModal: showVehicleSelectModal
+  };
+})();
+
+
+/* ========================================================
+ * Utility Functions
+ * ======================================================== */
+function escapeHtml(str) {
+  if (!str) return '';
+  var div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
+
+/* ========================================================
+ * App Initialization
+ * ======================================================== */
+document.addEventListener('DOMContentLoaded', function() {
+  var overlay = document.getElementById('loadingOverlay');
+
+  // Subscribe to data changes
+  DataManager.subscribe(function() {
+    UIManager.renderUnassignedPool();
+    GanttManager.refresh();
+  });
+
+  // Load data and initialize
+  DataManager.loadData()
+    .then(function() {
+      GanttManager.init();
+      UIManager.renderUnassignedPool();
+      UIManager.setupDragDrop();
+      UIManager.setupCSVImport();
+      overlay.style.display = 'none';
+    })
+    .catch(function(err) {
+      DOM.clear(overlay);
+      overlay.appendChild(
+        DOM.el('div', { className: 'text-center text-danger' }, [
+          DOM.el('p', { textContent: 'データの読み込みに失敗しました。' }),
+          DOM.el('p', { className: 'small', textContent: err.message }),
+          DOM.el('button', {
+            className: 'btn btn-primary',
+            textContent: '再読み込み'
+          })
+        ])
+      );
+      overlay.querySelector('button').addEventListener('click', function() {
+        location.reload();
+      });
+    });
+
+  // View mode switcher
+  document.querySelectorAll('input[name="viewMode"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      GanttManager.changeViewMode(this.value);
+    });
+  });
+});
+</script>
