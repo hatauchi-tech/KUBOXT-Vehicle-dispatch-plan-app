@@ -6,9 +6,18 @@
  * スプレッドシートインスタンスを取得
  */
 function getSpreadsheet() {
-  var id = CONFIG.SPREADSHEET_ID || PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  // スクリプトプロパティを優先し、なければConfig.gsのIDにフォールバック
+  var id = '';
+  try {
+    id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || '';
+  } catch (e) {
+    // PropertiesService未使用時のフォールバック
+  }
   if (!id) {
-    throw new Error('SPREADSHEET_IDが設定されていません。スクリプトプロパティを確認してください。');
+    id = CONFIG.SPREADSHEET_ID || '';
+  }
+  if (!id || id === 'YOUR_SPREADSHEET_ID_HERE') {
+    throw new Error('SPREADSHEET_IDが設定されていません。スクリプトプロパティまたはConfig.gsを確認してください。');
   }
   return SpreadsheetApp.openById(id);
 }

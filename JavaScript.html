@@ -1174,17 +1174,9 @@ function escapeHtml(str) {
 document.addEventListener('DOMContentLoaded', function() {
   var overlay = document.getElementById('loadingOverlay');
 
-  DataManager.subscribe(function() {
-    UIManager.renderUnassignedPool();
-    GanttManager.refresh();
-    GanttManager.populateGanttFilterOptions();
-    if (document.getElementById('viewStatus').style.display !== 'none') {
-      StatusManager.render();
-    }
-  });
-
   DataManager.loadData()
     .then(function() {
+      // 初回初期化 (Observer登録前に実施)
       GanttManager.init();
       GanttManager.setupGanttFilters();
       GanttManager.populateGanttFilterOptions();
@@ -1193,6 +1185,21 @@ document.addEventListener('DOMContentLoaded', function() {
       UIManager.setupSidebarFilters();
       UIManager.setupCSVImport();
       StatusManager.setup();
+
+      // 初期化完了後にObserverを登録 (以降のデータ更新でUI自動更新)
+      DataManager.subscribe(function() {
+        UIManager.renderUnassignedPool();
+        try {
+          GanttManager.refresh();
+        } catch (e) {
+          console.warn('Gantt refresh error in observer:', e.message);
+        }
+        GanttManager.populateGanttFilterOptions();
+        if (document.getElementById('viewStatus').style.display !== 'none') {
+          StatusManager.render();
+        }
+      });
+
       overlay.style.display = 'none';
     })
     .catch(function(err) {
