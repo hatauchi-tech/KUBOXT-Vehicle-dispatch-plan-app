@@ -1,11 +1,19 @@
 <script>
 /**
- * KUBOXT Dispatch Planner - Client-Side Logic
- * Modules: DataManager, GanttManager, UIManager
+ * KUBOXT 配車プランナー - クライアントサイドロジック
+ * モジュール: DataManager, GanttManager, UIManager
  */
 
+// ステータス定数 (サーバーのCONFIG.STATUSと一致させる)
+var STATUS = {
+  UNASSIGNED: '未割当',
+  ASSIGNED: '割当済',
+  EN_ROUTE: '配送中',
+  COMPLETED: '完了'
+};
+
 /* ========================================================
- * DataManager - Data state management with Observer pattern
+ * DataManager - データ管理 + Observer パターン
  * ======================================================== */
 var DataManager = (function() {
   var orders = [];
@@ -20,9 +28,6 @@ var DataManager = (function() {
     observers.forEach(function(fn) { fn(); });
   }
 
-  /**
-   * Call server function and return a Promise
-   */
   function callServer(fnName) {
     var args = Array.prototype.slice.call(arguments, 1);
     return new Promise(function(resolve, reject) {
@@ -49,11 +54,11 @@ var DataManager = (function() {
   function getVehicles() { return vehicles; }
 
   function getUnassignedOrders() {
-    return orders.filter(function(o) { return o.status === 'Unassigned'; });
+    return orders.filter(function(o) { return o.status === STATUS.UNASSIGNED || !o.status; });
   }
 
   function getAssignedOrders() {
-    return orders.filter(function(o) { return o.status !== 'Unassigned'; });
+    return orders.filter(function(o) { return o.status && o.status !== STATUS.UNASSIGNED; });
   }
 
   function getOrderById(requestId) {
@@ -64,30 +69,28 @@ var DataManager = (function() {
   }
 
   /**
-   * Optimistic update: modify local state immediately, sync to server.
-   * On failure, rollback and notify.
+   * Optimistic更新: ローカルを即座に更新 → サーバー同期 → 失敗時ロールバック
    */
   function updateOrder(orderId, updates) {
     var order = getOrderById(orderId);
-    if (!order) return Promise.reject(new Error('Order not found'));
+    if (!order) return Promise.reject(new Error('受注が見つかりません'));
 
-    // Save snapshot for rollback
     var snapshot = JSON.parse(JSON.stringify(order));
 
-    // Optimistic local update
+    // ローカル即時更新
     Object.keys(updates).forEach(function(key) {
       order[key] = updates[key];
     });
 
-    // Auto-fill vehicle info if truckId changed
-    if (updates.truckId) {
-      var vehicle = getVehicleById(updates.truckId);
+    // ナンバー変更時は車両マスターから自動反映
+    if (updates.number) {
+      var vehicle = getVehicleByNumber(updates.number);
       if (vehicle) {
-        order.vehicleNumber = vehicle.vehicleNumber;
+        order.vehicleNumber = vehicle.vehicleNumber || '';
         order.vehicleType = vehicle.vehicleType;
         order.driverName = vehicle.driverName;
       }
-    } else if (updates.truckId === '') {
+    } else if (updates.number === '') {
       order.vehicleNumber = '';
       order.vehicleType = '';
       order.driverName = '';
@@ -95,16 +98,16 @@ var DataManager = (function() {
 
     notifyObservers();
 
-    // Server sync
+    // サーバー同期
     return callServer('updateOrder', orderId, updates)
       .then(function(result) {
         if (result && !result.success) {
-          throw new Error(result.error || 'Update failed');
+          throw new Error(result.error || '更新に失敗しました。');
         }
         return result;
       })
       .catch(function(err) {
-        // Rollback on failure
+        // ロールバック
         Object.keys(snapshot).forEach(function(key) {
           order[key] = snapshot[key];
         });
@@ -113,9 +116,9 @@ var DataManager = (function() {
       });
   }
 
-  function getVehicleById(truckId) {
+  function getVehicleByNumber(number) {
     for (var i = 0; i < vehicles.length; i++) {
-      if (vehicles[i].truckId === truckId) return vehicles[i];
+      if (vehicles[i].number === number) return vehicles[i];
     }
     return null;
   }
@@ -127,7 +130,7 @@ var DataManager = (function() {
     getUnassignedOrders: getUnassignedOrders,
     getAssignedOrders: getAssignedOrders,
     getOrderById: getOrderById,
-    getVehicleById: getVehicleById,
+    getVehicleByNumber: getVehicleByNumber,
     updateOrder: updateOrder,
     subscribe: subscribe,
     callServer: callServer
@@ -136,15 +139,9 @@ var DataManager = (function() {
 
 
 /* ========================================================
- * DOM Helper - Safe element creation (no innerHTML)
+ * DOM ヘルパー - 安全な要素生成 (innerHTML不使用)
  * ======================================================== */
 var DOM = {
-  /**
-   * Create an element with attributes and children
-   * @param {string} tag
-   * @param {Object} attrs - { className, textContent, ... }
-   * @param {Array} children - child elements or strings
-   */
   el: function(tag, attrs, children) {
     var el = document.createElement(tag);
     if (attrs) {
@@ -173,17 +170,14 @@ var DOM = {
     }
     return el;
   },
-
   clear: function(el) {
-    while (el.firstChild) {
-      el.removeChild(el.firstChild);
-    }
+    while (el.firstChild) el.removeChild(el.firstChild);
   }
 };
 
 
 /* ========================================================
- * GanttManager - Frappe Gantt initialization and events
+ * GanttManager - Frappe Gantt 初期化 & イベント
  * ======================================================== */
 var GanttManager = (function() {
   var gantt = null;
@@ -191,18 +185,18 @@ var GanttManager = (function() {
 
   function getStatusClass(status) {
     switch (status) {
-      case 'Assigned': return 'status-assigned';
-      case 'En Route': return 'status-enroute';
-      case 'Completed': return 'status-completed';
+      case STATUS.ASSIGNED: return 'status-assigned';
+      case STATUS.EN_ROUTE: return 'status-enroute';
+      case STATUS.COMPLETED: return 'status-completed';
       default: return 'status-unassigned';
     }
   }
 
   function getStatusBadgeClass(status) {
     switch (status) {
-      case 'Assigned': return 'assigned';
-      case 'En Route': return 'enroute';
-      case 'Completed': return 'completed';
+      case STATUS.ASSIGNED: return 'assigned';
+      case STATUS.EN_ROUTE: return 'enroute';
+      case STATUS.COMPLETED: return 'completed';
       default: return 'unassigned';
     }
   }
@@ -212,7 +206,6 @@ var GanttManager = (function() {
       var startStr = order.loadDate + (order.loadTime ? ' ' + order.loadTime : ' 00:00');
       var endStr = order.unloadDate + (order.unloadTime ? ' ' + order.unloadTime : ' 23:59');
 
-      // Ensure end is after start
       if (!order.unloadDate || order.unloadDate < order.loadDate) {
         endStr = order.loadDate + (order.unloadTime ? ' ' + order.unloadTime : ' 23:59');
       }
@@ -222,7 +215,7 @@ var GanttManager = (function() {
         name: order.shipper + ' - ' + order.cargoName,
         start: startStr,
         end: endStr,
-        progress: order.status === 'Completed' ? 100 : (order.status === 'En Route' ? 50 : 0),
+        progress: order.status === STATUS.COMPLETED ? 100 : (order.status === STATUS.EN_ROUTE ? 50 : 0),
         custom_class: getStatusClass(order.status),
         dependencies: ''
       };
@@ -230,24 +223,27 @@ var GanttManager = (function() {
   }
 
   /**
-   * Build popup HTML for Frappe Gantt (library requires HTML string return).
-   * All user data is escaped via textContent-based escapeHtml.
+   * Frappe Ganttポップアップ用HTML (ライブラリAPIが文字列を要求)
+   * 全動的値はescapeHtmlで無害化
    */
   function buildPopupHtml(task) {
     var order = DataManager.getOrderById(task.id);
     if (!order) return '';
-    // Frappe Gantt API requires returning an HTML string for custom_popup_html.
-    // All dynamic values are escaped via escapeHtml to prevent XSS.
+    var loadLoc = [order.loadLocation1, order.loadLocation2].filter(Boolean).join(' ');
+    var unloadLoc = [order.unloadLocation1, order.unloadLocation2].filter(Boolean).join(' ');
     var parts = [
-      '<div class="p-2" style="min-width:200px">',
+      '<div class="p-2" style="min-width:220px">',
       '<h6 class="mb-1">', escapeHtml(order.shipper), '</h6>',
       '<p class="mb-1 small">', escapeHtml(order.cargoName), '</p>',
       '<p class="mb-1 small text-muted">',
-        escapeHtml(order.loadLocation), ' → ', escapeHtml(order.unloadLocation),
+        escapeHtml(loadLoc), ' → ', escapeHtml(unloadLoc),
       '</p>'
     ];
     if (order.driverName) {
       parts.push('<p class="mb-0 small"><strong>運転手:</strong> ', escapeHtml(order.driverName), '</p>');
+    }
+    if (order.vehicleNumber) {
+      parts.push('<p class="mb-0 small"><strong>車番:</strong> ', escapeHtml(order.vehicleNumber), '</p>');
     }
     parts.push(
       '<span class="badge status-badge-', getStatusBadgeClass(order.status), '">',
@@ -310,21 +306,19 @@ var GanttManager = (function() {
     var s = formatDT(start);
     var e = formatDT(end);
 
-    var updates = {
+    DataManager.updateOrder(task.id, {
       loadDate: s.date,
       loadTime: s.time,
       unloadDate: e.date,
       unloadTime: e.time
-    };
-
-    DataManager.updateOrder(task.id, updates)
-      .then(function() {
-        UIManager.showToast('日程を更新しました。', 'success');
-      })
-      .catch(function(err) {
-        UIManager.showToast('日程更新に失敗: ' + err.message, 'danger');
-        refresh();
-      });
+    })
+    .then(function() {
+      UIManager.showToast('日程を更新しました。', 'success');
+    })
+    .catch(function(err) {
+      UIManager.showToast('日程更新に失敗: ' + err.message, 'danger');
+      refresh();
+    });
   }
 
   function setupContextMenu() {
@@ -359,8 +353,8 @@ var GanttManager = (function() {
     document.getElementById('ctxUnassign').addEventListener('click', function() {
       if (!selectedTaskId) return;
       DataManager.updateOrder(selectedTaskId, {
-        truckId: '',
-        status: 'Unassigned'
+        number: '',
+        status: STATUS.UNASSIGNED
       }).then(function() {
         UIManager.showToast('割当を解除しました。', 'info');
       }).catch(function(err) {
@@ -410,7 +404,7 @@ var GanttManager = (function() {
 
 
 /* ========================================================
- * UIManager - Sidebar, Drag & Drop, Modals, Toasts
+ * UIManager - サイドバー、ドラッグ&ドロップ、モーダル、Toast
  * ======================================================== */
 var UIManager = (function() {
   var draggedOrderId = null;
@@ -431,6 +425,9 @@ var UIManager = (function() {
     }
 
     unassigned.forEach(function(order) {
+      var loadLoc = [order.loadLocation1, order.loadLocation2].filter(Boolean).join(' ');
+      var unloadLoc = [order.unloadLocation1, order.unloadLocation2].filter(Boolean).join(' ');
+
       var card = DOM.el('div', {
         className: 'card order-card',
         draggable: 'true',
@@ -442,9 +439,12 @@ var UIManager = (function() {
           DOM.el('p', { className: 'card-text' }, [
             DOM.el('small', { textContent: order.loadDate + ' ' + (order.loadTime || '') }),
             document.createElement('br'),
-            DOM.el('small', { textContent: order.loadLocation + ' → ' + order.unloadLocation })
-          ])
-        ])
+            DOM.el('small', { textContent: loadLoc + ' → ' + unloadLoc })
+          ]),
+          order.requestedType
+            ? DOM.el('span', { className: 'badge bg-light text-dark mt-1', textContent: order.requestedType })
+            : null
+        ].filter(Boolean))
       ]);
 
       card.addEventListener('dragstart', function(e) {
@@ -496,7 +496,7 @@ var UIManager = (function() {
       var item = DOM.el('button', { className: 'list-group-item list-group-item-action' }, [
         DOM.el('div', { className: 'd-flex justify-content-between align-items-center' }, [
           DOM.el('div', {}, [
-            DOM.el('strong', { textContent: v.vehicleNumber }),
+            DOM.el('strong', { textContent: v.number }),
             DOM.el('small', { className: 'text-muted ms-2', textContent: v.vehicleType })
           ]),
           DOM.el('small', { textContent: v.driverName })
@@ -504,7 +504,7 @@ var UIManager = (function() {
       ]);
 
       item.addEventListener('click', function() {
-        assignOrderToVehicle(orderId, v.truckId);
+        assignOrderToVehicle(orderId, v.number);
         bootstrap.Modal.getInstance(document.getElementById('vehicleSelectModal')).hide();
       });
 
@@ -515,10 +515,10 @@ var UIManager = (function() {
     modal.show();
   }
 
-  function assignOrderToVehicle(orderId, truckId) {
+  function assignOrderToVehicle(orderId, vehicleNumber) {
     DataManager.updateOrder(orderId, {
-      truckId: truckId,
-      status: 'Assigned'
+      number: vehicleNumber,
+      status: STATUS.ASSIGNED
     }).then(function() {
       showToast('受注を車両に割り当てました。', 'success');
     }).catch(function(err) {
@@ -531,17 +531,20 @@ var UIManager = (function() {
     var body = document.getElementById('taskDetailsBody');
     DOM.clear(body);
 
+    var loadLoc = [order.loadLocation1, order.loadLocation2].filter(Boolean).join(' ');
+    var unloadLoc = [order.unloadLocation1, order.unloadLocation2].filter(Boolean).join(' ');
+
     var fields = [
       ['依頼ID', order.requestId],
       ['受付日', order.receivedDate],
       ['荷主', order.shipper],
       ['積込日時', order.loadDate + ' ' + (order.loadTime || '')],
-      ['積込場所', order.loadLocation],
-      ['荷卸日時', order.unloadDate + ' ' + (order.unloadTime || '')],
-      ['荷卸場所', order.unloadLocation],
+      ['積込地', loadLoc],
       ['品名', order.cargoName],
-      ['数量', order.quantity],
-      ['備考', order.notes],
+      ['荷卸日時', order.unloadDate + ' ' + (order.unloadTime || '')],
+      ['荷卸地', unloadLoc],
+      ['依頼車種', order.requestedType],
+      ['ナンバー', order.number],
       ['車番', order.vehicleNumber],
       ['車種', order.vehicleType],
       ['運転手', order.driverName],
@@ -666,7 +669,7 @@ var UIManager = (function() {
 
 
 /* ========================================================
- * Utility Functions
+ * ユーティリティ
  * ======================================================== */
 function escapeHtml(str) {
   if (!str) return '';
@@ -677,18 +680,16 @@ function escapeHtml(str) {
 
 
 /* ========================================================
- * App Initialization
+ * アプリ初期化
  * ======================================================== */
 document.addEventListener('DOMContentLoaded', function() {
   var overlay = document.getElementById('loadingOverlay');
 
-  // Subscribe to data changes
   DataManager.subscribe(function() {
     UIManager.renderUnassignedPool();
     GanttManager.refresh();
   });
 
-  // Load data and initialize
   DataManager.loadData()
     .then(function() {
       GanttManager.init();
@@ -714,7 +715,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
 
-  // View mode switcher
   document.querySelectorAll('input[name="viewMode"]').forEach(function(radio) {
     radio.addEventListener('change', function() {
       GanttManager.changeViewMode(this.value);

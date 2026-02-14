@@ -27,24 +27,24 @@
 
   <!-- ===== Header / Navbar ===== -->
   <nav class="navbar navbar-dark bg-dark px-3">
-    <span class="navbar-brand mb-0 h1">KUBOXT Dispatch Planner</span>
+    <span class="navbar-brand mb-0 h1">KUBOXT 配車プランナー</span>
 
     <div class="d-flex align-items-center gap-3">
-      <!-- View Mode Switcher -->
-      <div class="view-mode-switcher btn-group" role="group" aria-label="View mode">
+      <!-- 表示切替 -->
+      <div class="view-mode-switcher btn-group" role="group" aria-label="表示モード">
         <input type="radio" class="btn-check" name="viewMode" id="viewDay" value="Day" autocomplete="off">
-        <label class="btn btn-outline-light btn-sm" for="viewDay">Day</label>
+        <label class="btn btn-outline-light btn-sm" for="viewDay">日</label>
 
         <input type="radio" class="btn-check" name="viewMode" id="viewWeek" value="Week" autocomplete="off" checked>
-        <label class="btn btn-outline-light btn-sm" for="viewWeek">Week</label>
+        <label class="btn btn-outline-light btn-sm" for="viewWeek">週</label>
 
         <input type="radio" class="btn-check" name="viewMode" id="viewMonth" value="Month" autocomplete="off">
-        <label class="btn btn-outline-light btn-sm" for="viewMonth">Month</label>
+        <label class="btn btn-outline-light btn-sm" for="viewMonth">月</label>
       </div>
 
-      <!-- CSV Import Button -->
+      <!-- CSVインポート -->
       <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#csvImportModal">
-        CSV Import
+        CSVインポート
       </button>
     </div>
   </nav>

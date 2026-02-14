@@ -1,11 +1,9 @@
 /**
- * KUBOXT Dispatch Planner - Lock Manager for Concurrent Updates
+ * KUBOXT 配車プランナー - 排他制御マネージャー
  */
 
 /**
- * Execute a callback within a script lock
- * @param {Function} callback - The function to execute under lock
- * @return {*} The callback's return value
+ * スクリプトロック内でコールバックを実行
  */
 function withLock(callback) {
   var lock = LockService.getScriptLock();
@@ -26,10 +24,9 @@ function withLock(callback) {
 }
 
 /**
- * Update an order with lock protection
- * @param {string} orderId - The request ID to find
- * @param {Object} updates - Key-value pairs to update
- * @return {Object} Result with success status
+ * ロック付き受注更新
+ * @param {string} orderId - 依頼ID
+ * @param {Object} updates - 更新するキー・値ペア
  */
 function updateOrderWithLock(orderId, updates) {
   return withLock(function() {
@@ -51,45 +48,44 @@ function updateOrderWithLock(orderId, updates) {
     }
 
     if (targetRow === -1) {
-      return { success: false, error: '受注ID ' + orderId + ' が見つかりません。' };
+      return { success: false, error: '依頼ID ' + orderId + ' が見つかりません。' };
     }
 
-    // Apply updates to specific columns
-    if (updates.truckId !== undefined) {
-      sheet.getRange(targetRow, col.TRUCK_ID).setValue(updates.truckId);
+    // ナンバー (車両割当) の更新
+    if (updates.number !== undefined) {
+      sheet.getRange(targetRow, col.NUMBER).setValue(updates.number);
 
-      // Auto-fill vehicle master data
-      if (updates.truckId) {
-        var vehicle = getVehicleById(updates.truckId);
+      // 車両マスターから自動反映
+      if (updates.number) {
+        var vehicle = getVehicleByNumber(updates.number);
         if (vehicle) {
-          sheet.getRange(targetRow, col.VEHICLE_NUMBER).setValue(vehicle.vehicleNumber);
+          sheet.getRange(targetRow, col.VEHICLE_NUMBER).setValue(vehicle.vehicleNumber || '');
           sheet.getRange(targetRow, col.VEHICLE_TYPE).setValue(vehicle.vehicleType);
           sheet.getRange(targetRow, col.DRIVER_NAME).setValue(vehicle.driverName);
         }
       } else {
-        // Clear vehicle info when unassigning
+        // 割当解除時は車両情報をクリア
         sheet.getRange(targetRow, col.VEHICLE_NUMBER).setValue('');
         sheet.getRange(targetRow, col.VEHICLE_TYPE).setValue('');
         sheet.getRange(targetRow, col.DRIVER_NAME).setValue('');
       }
     }
 
+    // ステータス更新
     if (updates.status !== undefined) {
       sheet.getRange(targetRow, col.STATUS).setValue(updates.status);
     }
 
+    // 日程更新 (ガントドラッグ時)
     if (updates.loadDate !== undefined) {
       sheet.getRange(targetRow, col.LOAD_DATE).setValue(updates.loadDate);
     }
-
     if (updates.loadTime !== undefined) {
       sheet.getRange(targetRow, col.LOAD_TIME).setValue(updates.loadTime);
     }
-
     if (updates.unloadDate !== undefined) {
       sheet.getRange(targetRow, col.UNLOAD_DATE).setValue(updates.unloadDate);
     }
-
     if (updates.unloadTime !== undefined) {
       sheet.getRange(targetRow, col.UNLOAD_TIME).setValue(updates.unloadTime);
     }

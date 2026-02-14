@@ -1,16 +1,14 @@
 /**
- * KUBOXT Dispatch Planner - Server Entry Point
+ * KUBOXT 配車プランナー - サーバーエントリーポイント
  */
 
 /**
- * Web App entry point - serves the appropriate page
- * @param {Object} e - Event parameter from doGet
- * @return {HtmlOutput} The HTML page
+ * Web App エントリーポイント - ページルーティング
  */
 function doGet(e) {
   var page = (e && e.parameter && e.parameter.page) || 'dashboard';
   var template = page === 'driver' ? 'DriverView' : 'index';
-  var title = page === 'driver' ? 'KUBOXT Driver' : 'KUBOXT Dispatch Planner';
+  var title = page === 'driver' ? 'KUBOXT ドライバー' : 'KUBOXT 配車プランナー';
 
   return HtmlService.createTemplateFromFile(template)
     .evaluate()
@@ -19,17 +17,14 @@ function doGet(e) {
 }
 
 /**
- * Include HTML partials (CSS, JS) into templates
- * @param {string} filename - The file to include
- * @return {string} The file content as HTML
+ * HTMLパーシャル (CSS, JS) をテンプレートに読み込み
  */
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
 /**
- * Get current user information
- * @return {Object} User info with email
+ * ログインユーザー情報を取得
  */
 function getUserInfo() {
   return {
@@ -38,8 +33,7 @@ function getUserInfo() {
 }
 
 /**
- * Fetch all data for the dashboard
- * @return {Object} Orders, vehicles, and timestamp
+ * ダッシュボード用データ一括取得
  */
 function getData() {
   try {
@@ -58,19 +52,18 @@ function getData() {
 }
 
 /**
- * Update an order (called from client-side)
- * @param {string} orderId - The order ID to update
- * @param {Object} updates - Key-value pairs to update
- * @return {Object} Result with success status
+ * 受注更新 (クライアントから呼び出し)
  */
 function updateOrder(orderId, updates) {
   return updateOrderWithLock(orderId, updates);
 }
 
 /**
- * Import CSV data into T_Orders
- * @param {string} csvContent - Raw CSV string
- * @return {Object} Result with imported count and warnings
+ * CSVインポート - T_荷主依頼データにデータ投入
+ *
+ * CSVカラム構成 (13列):
+ * 依頼ID, 受付日, 荷主, 積込日, 積込時間, 積込地1, 積込地2,
+ * 品名, 荷卸日, 荷卸時間, 荷卸地1, 荷卸地2, 依頼車種
  */
 function importCSV(csvContent) {
   try {
@@ -79,36 +72,39 @@ function importCSV(csvContent) {
       return { success: false, error: 'CSVにデータ行がありません。' };
     }
 
-    // Skip header row
-    var dataLines = lines.slice(1);
+    var dataLines = lines.slice(1); // ヘッダー行スキップ
     var validShippers = getAllShipperNames();
     var warnings = [];
     var rows = [];
+    var totalCols = CONFIG.COLUMNS.ORDERS_TOTAL_COLS; // 18
 
     for (var i = 0; i < dataLines.length; i++) {
       var fields = parseCSVLine(dataLines[i]);
-      if (fields.length < 12) {
-        warnings.push('行 ' + (i + 2) + ': カラム数不足 (' + fields.length + '/12)');
+      var lineNum = i + 2;
+
+      // CSVは13カラム (依頼ID～依頼車種)
+      if (fields.length < 13) {
+        warnings.push('行 ' + lineNum + ': カラム数不足 (' + fields.length + '/13)');
         continue;
       }
 
-      // Validate shipper against M_Shippers
+      // 荷主マスター検証
       var shipperName = fields[2] ? fields[2].trim() : '';
       if (validShippers.length > 0 && shipperName && validShippers.indexOf(shipperName) === -1) {
-        warnings.push('行 ' + (i + 2) + ': 荷主 "' + shipperName + '" がマスターに存在しません。');
+        warnings.push('行 ' + lineNum + ': 荷主 "' + shipperName + '" がマスターに存在しません。');
         continue;
       }
 
-      // Build row: 13 CSV columns + 5 system columns (truckId, vehicleNumber, vehicleType, driverName, status)
+      // 行データ構築: CSVの13列 + ナンバー(空) + 車番(空) + 車種(空) + 運転手(空) + ステータス(未割当)
       var row = [];
       for (var j = 0; j < 13; j++) {
         row.push(fields[j] !== undefined ? fields[j].trim() : '');
       }
-      row.push('');  // truckId
-      row.push('');  // vehicleNumber
-      row.push('');  // vehicleType
-      row.push('');  // driverName
-      row.push(CONFIG.STATUS.UNASSIGNED);  // status
+      row.push(''); // ナンバー (col 14)
+      row.push(''); // 車番 (col 15)
+      row.push(''); // 車種 (col 16)
+      row.push(''); // 運転手 (col 17)
+      row.push(CONFIG.STATUS.UNASSIGNED); // ステータス (col 18)
 
       rows.push(row);
     }
@@ -117,10 +113,10 @@ function importCSV(csvContent) {
       return { success: false, error: '有効なデータ行がありません。', warnings: warnings };
     }
 
-    // Batch insert into T_Orders
+    // バッチ挿入 (GAS 6分制限対策)
     var sheet = getSheet(CONFIG.SHEETS.ORDERS);
     var lastRow = sheet.getLastRow();
-    sheet.getRange(lastRow + 1, 1, rows.length, 18).setValues(rows);
+    sheet.getRange(lastRow + 1, 1, rows.length, totalCols).setValues(rows);
 
     return {
       success: true,
@@ -133,9 +129,7 @@ function importCSV(csvContent) {
 }
 
 /**
- * Parse a single CSV line handling quoted fields
- * @param {string} line - A CSV line
- * @return {Array<string>} Parsed fields
+ * CSV行パーサー (ダブルクォート対応)
  */
 function parseCSVLine(line) {
   var fields = [];
