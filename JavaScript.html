@@ -201,25 +201,49 @@ var GanttManager = (function() {
     }
   }
 
+  /**
+   * YYYY-MM-DD形式の日付文字列かどうかを検証
+   */
+  function isValidDateStr(s) {
+    return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  }
+
   function mapOrdersToGanttTasks(orders) {
-    return orders.map(function(order) {
-      var startStr = order.loadDate + (order.loadTime ? ' ' + order.loadTime : ' 00:00');
-      var endStr = order.unloadDate + (order.unloadTime ? ' ' + order.unloadTime : ' 23:59');
+    return orders
+      .filter(function(order) {
+        // 積込日が無い受注はガントに表示できない
+        return isValidDateStr(order.loadDate);
+      })
+      .map(function(order) {
+        var startDate = order.loadDate;
+        var startTime = order.loadTime || '00:00';
 
-      if (!order.unloadDate || order.unloadDate < order.loadDate) {
-        endStr = order.loadDate + (order.unloadTime ? ' ' + order.unloadTime : ' 23:59');
-      }
+        // 荷卸日が無い場合は積込日と同日とする
+        var endDate = isValidDateStr(order.unloadDate) ? order.unloadDate : startDate;
+        var endTime = order.unloadTime || '23:59';
 
-      return {
-        id: order.requestId,
-        name: order.shipper + ' - ' + order.cargoName,
-        start: startStr,
-        end: endStr,
-        progress: order.status === STATUS.COMPLETED ? 100 : (order.status === STATUS.EN_ROUTE ? 50 : 0),
-        custom_class: getStatusClass(order.status),
-        dependencies: ''
-      };
-    });
+        // 終了が開始より前の場合は同日に補正
+        if (endDate < startDate) {
+          endDate = startDate;
+        }
+
+        // 同日かつ終了時間が開始時間以前の場合は終了を+1時間に補正
+        if (endDate === startDate && endTime <= startTime) {
+          var parts = startTime.split(':');
+          var h = (parseInt(parts[0], 10) + 1) % 24;
+          endTime = ('0' + h).slice(-2) + ':' + parts[1];
+        }
+
+        return {
+          id: order.requestId,
+          name: order.shipper + ' - ' + order.cargoName,
+          start: startDate + ' ' + startTime,
+          end: endDate + ' ' + endTime,
+          progress: order.status === STATUS.COMPLETED ? 100 : (order.status === STATUS.EN_ROUTE ? 50 : 0),
+          custom_class: getStatusClass(order.status),
+          dependencies: ''
+        };
+      });
   }
 
   /**
@@ -264,10 +288,17 @@ var GanttManager = (function() {
       return;
     }
 
+    var tasks = mapOrdersToGanttTasks(assigned);
+
+    // 有効な日付を持つタスクが0件ならガント非表示
+    if (tasks.length === 0) {
+      ganttEl.style.display = 'none';
+      emptyEl.style.display = 'block';
+      return;
+    }
+
     ganttEl.style.display = 'block';
     emptyEl.style.display = 'none';
-
-    var tasks = mapOrdersToGanttTasks(assigned);
 
     gantt = new Gantt('#gantt', tasks, {
       view_mode: currentViewMode,
@@ -368,7 +399,9 @@ var GanttManager = (function() {
     var ganttEl = document.getElementById('gantt');
     var emptyEl = document.getElementById('ganttEmpty');
 
-    if (assigned.length === 0) {
+    var tasks = mapOrdersToGanttTasks(assigned);
+
+    if (tasks.length === 0) {
       DOM.clear(ganttEl);
       ganttEl.style.display = 'none';
       emptyEl.style.display = 'block';
@@ -379,10 +412,16 @@ var GanttManager = (function() {
     ganttEl.style.display = 'block';
     emptyEl.style.display = 'none';
 
-    var tasks = mapOrdersToGanttTasks(assigned);
-
     if (gantt) {
-      gantt.refresh(tasks);
+      try {
+        gantt.refresh(tasks);
+      } catch (e) {
+        // refresh失敗時はGanttを再生成
+        console.warn('Gantt refresh failed, reinitializing:', e.message);
+        DOM.clear(ganttEl);
+        gantt = null;
+        init();
+      }
     } else {
       init();
     }
