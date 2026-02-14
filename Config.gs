@@ -2,7 +2,7 @@
  * KUBOXT 配車プランナー - 設定定数
  */
 var CONFIG = {
-  SPREADSHEET_ID: 'YOUR_SPREADSHEET_ID_HERE',
+  SPREADSHEET_ID: '',
 
   SHEETS: {
     ORDERS: 'T_荷主依頼データ',

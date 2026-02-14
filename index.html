@@ -29,7 +29,17 @@
   <nav class="navbar navbar-dark bg-dark px-3">
     <span class="navbar-brand mb-0 h1">KUBOXT 配車プランナー</span>
 
-    <div class="d-flex align-items-center gap-3">
+    <!-- 画面切替タブ -->
+    <ul class="nav nav-pills" id="mainTabs">
+      <li class="nav-item">
+        <button class="nav-link active" id="tabGantt" data-view="gantt">配車計画</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="tabStatus" data-view="status">配車状況</button>
+      </li>
+    </ul>
+
+    <div class="d-flex align-items-center gap-3" id="ganttNavControls">
       <!-- 表示切替 -->
       <div class="view-mode-switcher btn-group" role="group" aria-label="表示モード">
         <input type="radio" class="btn-check" name="viewMode" id="viewDay" value="Day" autocomplete="off">
@@ -49,8 +59,8 @@
     </div>
   </nav>
 
-  <!-- ===== Main Content ===== -->
-  <div class="container-fluid dashboard-container">
+  <!-- ===== ガントビュー (配車計画) ===== -->
+  <div id="viewGantt" class="container-fluid dashboard-container">
     <div class="row h-100">
       <!-- Sidebar: Unassigned Orders -->
       <div class="col-md-3 sidebar">
@@ -58,14 +68,186 @@
           未割当受注
           <span id="unassignedCount" class="badge bg-secondary ms-1">0</span>
         </h6>
+        <!-- サイドバーフィルター -->
+        <div class="filter-panel mb-3">
+          <div class="mb-2">
+            <label class="form-label small text-muted mb-1">依頼車種</label>
+            <select class="form-select form-select-sm" id="filterRequestedType">
+              <option value="">すべて</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small text-muted mb-1">積込日</label>
+            <input type="date" class="form-control form-control-sm" id="filterLoadDate">
+          </div>
+          <button class="btn btn-outline-secondary btn-sm w-100" id="clearSidebarFilter">フィルターをクリア</button>
+        </div>
         <div id="unassignedPool"></div>
       </div>
 
       <!-- Main: Gantt Chart -->
       <div class="col-md-9 gantt-container" id="ganttDropZone">
+        <!-- ガントフィルターバー -->
+        <div class="gantt-filter-bar d-flex align-items-center gap-2 mb-2 flex-wrap">
+          <div>
+            <label class="form-label small text-muted mb-0">車種</label>
+            <select class="form-select form-select-sm" id="ganttFilterVehicleType" style="width:auto;min-width:120px;">
+              <option value="">すべて</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label small text-muted mb-0">日付</label>
+            <input type="date" class="form-control form-control-sm" id="ganttFilterDate" style="width:auto;">
+          </div>
+          <div>
+            <label class="form-label small text-muted mb-0">荷主</label>
+            <select class="form-select form-select-sm" id="ganttFilterShipper" style="width:auto;min-width:150px;">
+              <option value="">すべて</option>
+            </select>
+          </div>
+          <div class="ms-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="clearGanttFilter">クリア</button>
+          </div>
+        </div>
         <div id="gantt"></div>
         <div id="ganttEmpty" class="text-center text-muted py-5" style="display: none;">
           <p>割当済みの受注がありません。<br>左のパネルからドラッグして割り当ててください。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 配車状況ビュー ===== -->
+  <div id="viewStatus" class="container-fluid py-3" style="display: none;">
+    <!-- ステータスサマリーカード -->
+    <div class="row mb-3">
+      <div class="col-md-3">
+        <div class="card text-center border-secondary">
+          <div class="card-body py-2">
+            <h3 class="mb-0" id="summaryTotal">0</h3>
+            <small class="text-muted">全案件</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center border-danger">
+          <div class="card-body py-2">
+            <h3 class="mb-0 text-danger" id="summaryUnassigned">0</h3>
+            <small class="text-muted">未配車</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center border-primary">
+          <div class="card-body py-2">
+            <h3 class="mb-0 text-primary" id="summaryAssigned">0</h3>
+            <small class="text-muted">配車済</small>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-center border-success">
+          <div class="card-body py-2">
+            <h3 class="mb-0 text-success" id="summaryCompleted">0</h3>
+            <small class="text-muted">完了</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- フィルター＆グルーピングバー -->
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+      <div>
+        <label class="form-label small text-muted mb-0">表示日</label>
+        <input type="date" class="form-control form-control-sm" id="statusFilterDate" style="width:auto;">
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-0">ステータス</label>
+        <select class="form-select form-select-sm" id="statusFilterStatus" style="width:auto;min-width:120px;">
+          <option value="">すべて</option>
+          <option value="未割当">未割当</option>
+          <option value="割当済">割当済</option>
+          <option value="配送中">配送中</option>
+          <option value="完了">完了</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-0">グループ</label>
+        <select class="form-select form-select-sm" id="statusGroupBy" style="width:auto;min-width:120px;">
+          <option value="date">日付別</option>
+          <option value="driver">運転手別</option>
+          <option value="vehicleType">車種別</option>
+          <option value="shipper">荷主別</option>
+        </select>
+      </div>
+      <button class="btn btn-outline-secondary btn-sm" id="clearStatusFilter">クリア</button>
+    </div>
+
+    <!-- アコーディオン型の案件一覧 -->
+    <div class="accordion" id="statusAccordion"></div>
+
+    <!-- 空状態 -->
+    <div id="statusEmpty" class="text-center text-muted py-5" style="display: none;">
+      <p>表示する案件がありません。</p>
+    </div>
+  </div>
+
+  <!-- ===== 受注編集モーダル ===== -->
+  <div class="modal fade" id="orderEditModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">受注編集</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="editOrderId">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">荷主</label>
+              <input type="text" class="form-control" id="editShipper" readonly>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">品名</label>
+              <input type="text" class="form-control" id="editCargoName" readonly>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">積込日</label>
+              <input type="date" class="form-control" id="editLoadDate">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">積込時間</label>
+              <input type="time" class="form-control" id="editLoadTime">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">荷卸日</label>
+              <input type="date" class="form-control" id="editUnloadDate">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">荷卸時間</label>
+              <input type="time" class="form-control" id="editUnloadTime">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">車両 (ナンバー)</label>
+              <select class="form-select" id="editVehicle">
+                <option value="">未割当</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">ステータス</label>
+              <select class="form-select" id="editStatus">
+                <option value="未割当">未割当</option>
+                <option value="割当済">割当済</option>
+                <option value="配送中">配送中</option>
+                <option value="完了">完了</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger me-auto" id="editUnassignBtn">割当解除</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="editSaveBtn">保存</button>
         </div>
       </div>
     </div>

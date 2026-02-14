@@ -6,7 +6,11 @@
  * スプレッドシートインスタンスを取得
  */
 function getSpreadsheet() {
-  return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var id = CONFIG.SPREADSHEET_ID || PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  if (!id) {
+    throw new Error('SPREADSHEET_IDが設定されていません。スクリプトプロパティを確認してください。');
+  }
+  return SpreadsheetApp.openById(id);
 }
 
 /**

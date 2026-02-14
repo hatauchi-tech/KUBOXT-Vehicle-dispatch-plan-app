@@ -59,7 +59,7 @@ function updateOrderWithLock(orderId, updates) {
       if (updates.number) {
         var vehicle = getVehicleByNumber(updates.number);
         if (vehicle) {
-          sheet.getRange(targetRow, col.VEHICLE_NUMBER).setValue(vehicle.vehicleNumber || '');
+          sheet.getRange(targetRow, col.VEHICLE_NUMBER).setValue(vehicle.radioNumber || '');
           sheet.getRange(targetRow, col.VEHICLE_TYPE).setValue(vehicle.vehicleType);
           sheet.getRange(targetRow, col.DRIVER_NAME).setValue(vehicle.driverName);
         }

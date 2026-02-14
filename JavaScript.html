@@ -86,7 +86,7 @@ var DataManager = (function() {
     if (updates.number) {
       var vehicle = getVehicleByNumber(updates.number);
       if (vehicle) {
-        order.vehicleNumber = vehicle.vehicleNumber || '';
+        order.vehicleNumber = vehicle.radioNumber || '';
         order.vehicleType = vehicle.vehicleType;
         order.driverName = vehicle.driverName;
       }
@@ -182,6 +182,85 @@ var DOM = {
 var GanttManager = (function() {
   var gantt = null;
   var currentViewMode = 'Week';
+  var ganttFilters = {
+    vehicleType: '',
+    date: '',
+    shipper: ''
+  };
+
+  function getFilteredOrders() {
+    var allOrders = DataManager.getOrders();
+    return allOrders.filter(function(o) {
+      if (ganttFilters.vehicleType) {
+        var vType = o.vehicleType || o.requestedType || '';
+        if (vType !== ganttFilters.vehicleType) return false;
+      }
+      if (ganttFilters.date) {
+        var matchDate = ganttFilters.date;
+        var loadD = o.loadDate || '';
+        var unloadD = o.unloadDate || loadD;
+        if (loadD !== matchDate && unloadD !== matchDate) {
+          if (!(loadD <= matchDate && unloadD >= matchDate)) {
+            return false;
+          }
+        }
+      }
+      if (ganttFilters.shipper && o.shipper !== ganttFilters.shipper) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  function populateGanttFilterOptions() {
+    var orders = DataManager.getOrders();
+    var vehicles = DataManager.getVehicles();
+
+    var types = {};
+    vehicles.forEach(function(v) { if (v.vehicleType) types[v.vehicleType] = true; });
+    orders.forEach(function(o) { if (o.requestedType) types[o.requestedType] = true; });
+    var typeSelect = document.getElementById('ganttFilterVehicleType');
+    var currentType = typeSelect.value;
+    while (typeSelect.options.length > 1) typeSelect.remove(1);
+    Object.keys(types).sort().forEach(function(t) {
+      typeSelect.add(new Option(t, t));
+    });
+    typeSelect.value = currentType;
+
+    var shippers = {};
+    orders.forEach(function(o) { if (o.shipper) shippers[o.shipper] = true; });
+    var shipperSelect = document.getElementById('ganttFilterShipper');
+    var currentShipper = shipperSelect.value;
+    while (shipperSelect.options.length > 1) shipperSelect.remove(1);
+    Object.keys(shippers).sort().forEach(function(s) {
+      shipperSelect.add(new Option(s, s));
+    });
+    shipperSelect.value = currentShipper;
+  }
+
+  function setupGanttFilters() {
+    document.getElementById('ganttFilterVehicleType').addEventListener('change', function() {
+      ganttFilters.vehicleType = this.value;
+      refresh();
+    });
+    document.getElementById('ganttFilterDate').addEventListener('change', function() {
+      ganttFilters.date = this.value;
+      refresh();
+    });
+    document.getElementById('ganttFilterShipper').addEventListener('change', function() {
+      ganttFilters.shipper = this.value;
+      refresh();
+    });
+    document.getElementById('clearGanttFilter').addEventListener('click', function() {
+      ganttFilters.vehicleType = '';
+      ganttFilters.date = '';
+      ganttFilters.shipper = '';
+      document.getElementById('ganttFilterVehicleType').value = '';
+      document.getElementById('ganttFilterDate').value = '';
+      document.getElementById('ganttFilterShipper').value = '';
+      refresh();
+    });
+  }
 
   function getStatusClass(status) {
     switch (status) {
@@ -284,8 +363,8 @@ var GanttManager = (function() {
   }
 
   function init() {
-    // 全受注をガントチャートに表示 (未割当=グレー, 割当済=青, 配送中=オレンジ, 完了=緑)
-    var allOrders = DataManager.getOrders();
+    // フィルター適用済み受注をガントチャートに表示
+    var allOrders = getFilteredOrders();
     var ganttEl = document.getElementById('gantt');
     var emptyEl = document.getElementById('ganttEmpty');
 
@@ -395,7 +474,7 @@ var GanttManager = (function() {
   }
 
   function refresh() {
-    var allOrders = DataManager.getOrders();
+    var allOrders = getFilteredOrders();
     var ganttEl = document.getElementById('gantt');
     var emptyEl = document.getElementById('ganttEmpty');
 
@@ -437,7 +516,9 @@ var GanttManager = (function() {
   return {
     init: init,
     refresh: refresh,
-    changeViewMode: changeViewMode
+    changeViewMode: changeViewMode,
+    setupGanttFilters: setupGanttFilters,
+    populateGanttFilterOptions: populateGanttFilterOptions
   };
 })();
 
@@ -447,11 +528,61 @@ var GanttManager = (function() {
  * ======================================================== */
 var UIManager = (function() {
   var draggedOrderId = null;
+  var sidebarFilters = {
+    requestedType: '',
+    loadDate: ''
+  };
+
+  function getFilteredUnassignedOrders() {
+    var unassigned = DataManager.getUnassignedOrders();
+    return unassigned.filter(function(o) {
+      if (sidebarFilters.requestedType && o.requestedType !== sidebarFilters.requestedType) {
+        return false;
+      }
+      if (sidebarFilters.loadDate && o.loadDate !== sidebarFilters.loadDate) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  function populateSidebarFilterOptions() {
+    var select = document.getElementById('filterRequestedType');
+    var currentVal = select.value;
+    var types = {};
+    DataManager.getUnassignedOrders().forEach(function(o) {
+      if (o.requestedType) types[o.requestedType] = true;
+    });
+    while (select.options.length > 1) select.remove(1);
+    Object.keys(types).sort().forEach(function(t) {
+      select.add(new Option(t, t));
+    });
+    select.value = currentVal;
+  }
+
+  function setupSidebarFilters() {
+    document.getElementById('filterRequestedType').addEventListener('change', function() {
+      sidebarFilters.requestedType = this.value;
+      renderUnassignedPool();
+    });
+    document.getElementById('filterLoadDate').addEventListener('change', function() {
+      sidebarFilters.loadDate = this.value;
+      renderUnassignedPool();
+    });
+    document.getElementById('clearSidebarFilter').addEventListener('click', function() {
+      sidebarFilters.requestedType = '';
+      sidebarFilters.loadDate = '';
+      document.getElementById('filterRequestedType').value = '';
+      document.getElementById('filterLoadDate').value = '';
+      renderUnassignedPool();
+    });
+  }
 
   function renderUnassignedPool() {
     var pool = document.getElementById('unassignedPool');
     var countBadge = document.getElementById('unassignedCount');
-    var unassigned = DataManager.getUnassignedOrders();
+    var unassigned = getFilteredUnassignedOrders();
+    populateSidebarFilterOptions();
 
     countBadge.textContent = unassigned.length;
     DOM.clear(pool);
@@ -699,10 +830,329 @@ var UIManager = (function() {
   return {
     renderUnassignedPool: renderUnassignedPool,
     setupDragDrop: setupDragDrop,
+    setupSidebarFilters: setupSidebarFilters,
     showTaskDetailsModal: showTaskDetailsModal,
     showToast: showToast,
     setupCSVImport: setupCSVImport,
     showVehicleSelectModal: showVehicleSelectModal
+  };
+})();
+
+
+/* ========================================================
+ * StatusManager - 配車状況確認画面
+ * ======================================================== */
+var StatusManager = (function() {
+  var filters = {
+    date: '',
+    status: '',
+    groupBy: 'date'
+  };
+
+  function getFilteredOrders() {
+    var orders = DataManager.getOrders();
+    return orders.filter(function(o) {
+      if (filters.date) {
+        var loadD = o.loadDate || '';
+        var unloadD = o.unloadDate || loadD;
+        if (loadD !== filters.date && unloadD !== filters.date) {
+          if (!(loadD <= filters.date && unloadD >= filters.date)) {
+            return false;
+          }
+        }
+      }
+      if (filters.status) {
+        var orderStatus = o.status || STATUS.UNASSIGNED;
+        if (orderStatus !== filters.status) return false;
+      }
+      return true;
+    });
+  }
+
+  function groupOrders(orders, groupBy) {
+    var groups = {};
+    orders.forEach(function(o) {
+      var key;
+      switch (groupBy) {
+        case 'driver':
+          key = o.driverName || '(未割当)';
+          break;
+        case 'vehicleType':
+          key = o.vehicleType || o.requestedType || '(車種不明)';
+          break;
+        case 'shipper':
+          key = o.shipper || '(荷主不明)';
+          break;
+        case 'date':
+        default:
+          key = o.loadDate || '(日付なし)';
+          break;
+      }
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(o);
+    });
+    return groups;
+  }
+
+  function getStatusColor(status) {
+    switch (status) {
+      case STATUS.ASSIGNED: return '#0d6efd';
+      case STATUS.EN_ROUTE: return '#ffc107';
+      case STATUS.COMPLETED: return '#198754';
+      default: return '#6c757d';
+    }
+  }
+
+  function getStatusBadgeSuffix(status) {
+    switch (status) {
+      case STATUS.ASSIGNED: return 'assigned';
+      case STATUS.EN_ROUTE: return 'enroute';
+      case STATUS.COMPLETED: return 'completed';
+      default: return 'unassigned';
+    }
+  }
+
+  function updateSummary() {
+    var orders = DataManager.getOrders();
+    var total = orders.length;
+    var unassigned = 0, assigned = 0, completed = 0;
+    orders.forEach(function(o) {
+      if (o.status === STATUS.UNASSIGNED || !o.status) unassigned++;
+      else if (o.status === STATUS.COMPLETED) completed++;
+      else assigned++;
+    });
+    document.getElementById('summaryTotal').textContent = total;
+    document.getElementById('summaryUnassigned').textContent = unassigned;
+    document.getElementById('summaryAssigned').textContent = assigned;
+    document.getElementById('summaryCompleted').textContent = completed;
+  }
+
+  function render() {
+    var accordion = document.getElementById('statusAccordion');
+    var emptyEl = document.getElementById('statusEmpty');
+    DOM.clear(accordion);
+
+    updateSummary();
+
+    var filtered = getFilteredOrders();
+    if (filtered.length === 0) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    var groups = groupOrders(filtered, filters.groupBy);
+    var sortedKeys = Object.keys(groups).sort();
+
+    sortedKeys.forEach(function(key, index) {
+      var items = groups[key];
+      var collapseId = 'statusGroup' + index;
+
+      var unassignedCount = items.filter(function(o) {
+        return o.status === STATUS.UNASSIGNED || !o.status;
+      }).length;
+
+      // アコーディオンヘッダー
+      var headerBtn = DOM.el('button', {
+        className: 'accordion-button' + (index > 0 ? ' collapsed' : ''),
+        type: 'button',
+        'data-bs-toggle': 'collapse',
+        'data-bs-target': '#' + collapseId
+      }, [
+        DOM.el('span', { textContent: key }),
+        DOM.el('span', { className: 'badge bg-secondary ms-2', textContent: items.length + '件' }),
+        unassignedCount > 0
+          ? DOM.el('span', { className: 'badge bg-danger ms-1', textContent: '未配車 ' + unassignedCount })
+          : null
+      ].filter(Boolean));
+
+      var header = DOM.el('h2', { className: 'accordion-header' }, [headerBtn]);
+
+      // アコーディオンボディ
+      var bodyInner = DOM.el('div', { className: 'accordion-body p-0' });
+
+      items.forEach(function(order) {
+        var loadLoc = [order.loadLocation1, order.loadLocation2].filter(Boolean).join(' ');
+        var unloadLoc = [order.unloadLocation1, order.unloadLocation2].filter(Boolean).join(' ');
+        var orderStatus = order.status || STATUS.UNASSIGNED;
+
+        // 編集ボタン
+        var editBtn = DOM.el('button', {
+          className: 'btn btn-outline-primary btn-sm me-1',
+          textContent: '編集',
+          title: '受注を編集'
+        });
+
+        // 解除ボタン (未割当以外のみ表示)
+        var unassignBtn = null;
+        if (orderStatus !== STATUS.UNASSIGNED) {
+          unassignBtn = DOM.el('button', {
+            className: 'btn btn-outline-danger btn-sm',
+            textContent: '解除',
+            title: '割当を解除'
+          });
+        }
+
+        var actionsChildren = [editBtn];
+        if (unassignBtn) actionsChildren.push(unassignBtn);
+
+        // ドライバー情報行
+        var driverInfo = null;
+        if (order.driverName) {
+          driverInfo = DOM.el('div', { className: 'small' }, [
+            DOM.el('span', { className: 'text-primary', textContent: order.driverName }),
+            DOM.el('span', { className: 'text-muted ms-2', textContent: order.vehicleType || '' }),
+            order.number
+              ? DOM.el('span', { className: 'text-muted ms-1', textContent: '[' + order.number + ']' })
+              : null
+          ].filter(Boolean));
+        }
+
+        var row = DOM.el('div', { className: 'status-order-row' }, [
+          DOM.el('div', {
+            className: 'status-indicator',
+            style: { backgroundColor: getStatusColor(orderStatus) }
+          }),
+          DOM.el('div', { className: 'flex-grow-1' }, [
+            DOM.el('div', { className: 'd-flex align-items-center gap-2' }, [
+              DOM.el('strong', { className: 'small', textContent: order.shipper }),
+              DOM.el('span', { className: 'small text-muted', textContent: order.cargoName }),
+              DOM.el('span', {
+                className: 'badge status-badge-' + getStatusBadgeSuffix(orderStatus),
+                style: { fontSize: '0.65rem' },
+                textContent: orderStatus
+              })
+            ]),
+            DOM.el('div', { className: 'small text-muted' }, [
+              DOM.el('span', {
+                textContent: (order.loadDate || '') + ' ' + (order.loadTime || '') + ' ' + loadLoc
+              }),
+              DOM.el('span', { textContent: ' → ' }),
+              DOM.el('span', {
+                textContent: (order.unloadDate || '') + ' ' + (order.unloadTime || '') + ' ' + unloadLoc
+              })
+            ]),
+            driverInfo
+          ].filter(Boolean)),
+          DOM.el('div', { className: 'order-actions' }, actionsChildren)
+        ]);
+
+        // イベントリスナー
+        editBtn.addEventListener('click', function() {
+          showEditModal(order);
+        });
+
+        if (unassignBtn) {
+          unassignBtn.addEventListener('click', function() {
+            DataManager.updateOrder(order.requestId, {
+              number: '',
+              status: STATUS.UNASSIGNED
+            }).then(function() {
+              UIManager.showToast('割当を解除しました。', 'info');
+            }).catch(function(err) {
+              UIManager.showToast('割当解除に失敗: ' + err.message, 'danger');
+            });
+          });
+        }
+
+        bodyInner.appendChild(row);
+      });
+
+      var collapseDiv = DOM.el('div', {
+        className: 'accordion-collapse collapse' + (index === 0 ? ' show' : ''),
+        id: collapseId,
+        'data-bs-parent': '#statusAccordion'
+      }, [bodyInner]);
+
+      var item = DOM.el('div', { className: 'accordion-item' }, [header, collapseDiv]);
+      accordion.appendChild(item);
+    });
+  }
+
+  function showEditModal(order) {
+    document.getElementById('editOrderId').value = order.requestId;
+    document.getElementById('editShipper').value = order.shipper || '';
+    document.getElementById('editCargoName').value = order.cargoName || '';
+    document.getElementById('editLoadDate').value = order.loadDate || '';
+    document.getElementById('editLoadTime').value = order.loadTime || '';
+    document.getElementById('editUnloadDate').value = order.unloadDate || '';
+    document.getElementById('editUnloadTime').value = order.unloadTime || '';
+    document.getElementById('editStatus').value = order.status || STATUS.UNASSIGNED;
+
+    var vehicleSelect = document.getElementById('editVehicle');
+    while (vehicleSelect.options.length > 1) vehicleSelect.remove(1);
+    DataManager.getVehicles().forEach(function(v) {
+      var opt = new Option(v.number + ' (' + v.vehicleType + ' - ' + v.driverName + ')', v.number);
+      vehicleSelect.add(opt);
+    });
+    vehicleSelect.value = order.number || '';
+
+    var modal = new bootstrap.Modal(document.getElementById('orderEditModal'));
+    modal.show();
+  }
+
+  function saveEdit() {
+    var orderId = document.getElementById('editOrderId').value;
+    var updates = {
+      loadDate: document.getElementById('editLoadDate').value,
+      loadTime: document.getElementById('editLoadTime').value,
+      unloadDate: document.getElementById('editUnloadDate').value,
+      unloadTime: document.getElementById('editUnloadTime').value,
+      number: document.getElementById('editVehicle').value,
+      status: document.getElementById('editStatus').value
+    };
+
+    DataManager.updateOrder(orderId, updates)
+      .then(function() {
+        UIManager.showToast('受注を更新しました。', 'success');
+        bootstrap.Modal.getInstance(document.getElementById('orderEditModal')).hide();
+      })
+      .catch(function(err) {
+        UIManager.showToast('更新に失敗: ' + err.message, 'danger');
+      });
+  }
+
+  function unassignFromEdit() {
+    var orderId = document.getElementById('editOrderId').value;
+    DataManager.updateOrder(orderId, {
+      number: '',
+      status: STATUS.UNASSIGNED
+    }).then(function() {
+      UIManager.showToast('割当を解除しました。', 'info');
+      bootstrap.Modal.getInstance(document.getElementById('orderEditModal')).hide();
+    }).catch(function(err) {
+      UIManager.showToast('割当解除に失敗: ' + err.message, 'danger');
+    });
+  }
+
+  function setup() {
+    document.getElementById('statusFilterDate').addEventListener('change', function() {
+      filters.date = this.value;
+      render();
+    });
+    document.getElementById('statusFilterStatus').addEventListener('change', function() {
+      filters.status = this.value;
+      render();
+    });
+    document.getElementById('statusGroupBy').addEventListener('change', function() {
+      filters.groupBy = this.value;
+      render();
+    });
+    document.getElementById('clearStatusFilter').addEventListener('click', function() {
+      filters.date = '';
+      filters.status = '';
+      document.getElementById('statusFilterDate').value = '';
+      document.getElementById('statusFilterStatus').value = '';
+      render();
+    });
+
+    document.getElementById('editSaveBtn').addEventListener('click', saveEdit);
+    document.getElementById('editUnassignBtn').addEventListener('click', unassignFromEdit);
+  }
+
+  return {
+    render: render,
+    setup: setup
   };
 })();
 
@@ -727,14 +1177,22 @@ document.addEventListener('DOMContentLoaded', function() {
   DataManager.subscribe(function() {
     UIManager.renderUnassignedPool();
     GanttManager.refresh();
+    GanttManager.populateGanttFilterOptions();
+    if (document.getElementById('viewStatus').style.display !== 'none') {
+      StatusManager.render();
+    }
   });
 
   DataManager.loadData()
     .then(function() {
       GanttManager.init();
+      GanttManager.setupGanttFilters();
+      GanttManager.populateGanttFilterOptions();
       UIManager.renderUnassignedPool();
       UIManager.setupDragDrop();
+      UIManager.setupSidebarFilters();
       UIManager.setupCSVImport();
+      StatusManager.setup();
       overlay.style.display = 'none';
     })
     .catch(function(err) {
@@ -757,6 +1215,27 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('input[name="viewMode"]').forEach(function(radio) {
     radio.addEventListener('change', function() {
       GanttManager.changeViewMode(this.value);
+    });
+  });
+
+  // タブ切替
+  document.querySelectorAll('#mainTabs .nav-link').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      document.querySelectorAll('#mainTabs .nav-link').forEach(function(t) {
+        t.classList.remove('active');
+      });
+      this.classList.add('active');
+
+      var view = this.getAttribute('data-view');
+      document.getElementById('viewGantt').style.display = view === 'gantt' ? '' : 'none';
+      document.getElementById('viewStatus').style.display = view === 'status' ? '' : 'none';
+
+      var ganttControls = document.getElementById('ganttNavControls');
+      if (ganttControls) ganttControls.style.display = view === 'gantt' ? '' : 'none';
+
+      if (view === 'status') {
+        StatusManager.render();
+      }
     });
   });
 });
