@@ -46,6 +46,19 @@ function formatTime(timeObj) {
 }
 
 /**
+ * ステータス自動検出
+ * ステータス列が空でもナンバー(車両)が入っていれば「割当済」とみなす
+ */
+function detectStatus(statusValue, numberValue) {
+  var s = statusValue ? String(statusValue).trim() : '';
+  if (s) return s; // 明示的なステータスがあればそのまま使用
+
+  // ステータス空 → ナンバーの有無で判定
+  var n = numberValue ? String(numberValue).trim() : '';
+  return n ? CONFIG.STATUS.ASSIGNED : CONFIG.STATUS.UNASSIGNED;
+}
+
+/**
  * T_荷主依頼データの全受注をJSON配列で返却
  * GAS Date型は文字列に変換してクライアントに返す
  */
@@ -78,7 +91,7 @@ function getAllOrders() {
       vehicleNumber: String(row[col.VEHICLE_NUMBER - 1] || ''),
       vehicleType: String(row[col.VEHICLE_TYPE - 1] || ''),
       driverName: String(row[col.DRIVER_NAME - 1] || ''),
-      status: String(row[col.STATUS - 1] || CONFIG.STATUS.UNASSIGNED)
+      status: detectStatus(row[col.STATUS - 1], row[col.NUMBER - 1])
     };
   });
 }
