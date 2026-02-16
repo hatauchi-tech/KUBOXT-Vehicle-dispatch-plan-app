@@ -45,6 +45,13 @@ export const VehicleForm: React.FC<VehicleFormProps> = ({ vehicle, onSubmit, onC
     setError('');
     setLoading(true);
 
+    // Validate required array field
+    if (formData.supportedRequestTypes.length === 0) {
+      setError('対応可能依頼を最低1つ選択してください');
+      setLoading(false);
+      return;
+    }
+
     try {
       await onSubmit({
         vehicleNumber: formData.vehicleNumber,

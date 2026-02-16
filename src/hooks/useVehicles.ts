@@ -30,7 +30,8 @@ export const useVehicles = () => {
       await vehicleService.create(vehicle);
       await fetchVehicles();
     } catch (err) {
-      throw new Error('車両の追加に失敗しました');
+      console.error('Failed to create vehicle:', err);
+      throw new Error(`車両の追加に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`);
     }
   };
 
@@ -39,7 +40,8 @@ export const useVehicles = () => {
       await vehicleService.update(vehicleNumber, updates);
       await fetchVehicles();
     } catch (err) {
-      throw new Error('車両の更新に失敗しました');
+      console.error('Failed to update vehicle:', err);
+      throw new Error(`車両の更新に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`);
     }
   };
 
@@ -48,7 +50,8 @@ export const useVehicles = () => {
       await vehicleService.delete(vehicleNumber);
       await fetchVehicles();
     } catch (err) {
-      throw new Error('車両の削除に失敗しました');
+      console.error('Failed to delete vehicle:', err);
+      throw new Error(`車両の削除に失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`);
     }
   };
 
