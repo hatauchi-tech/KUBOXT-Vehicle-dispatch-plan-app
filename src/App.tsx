@@ -5,11 +5,11 @@ import { LoginPage } from './pages/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { VehicleMasterPage } from './pages/VehicleMasterPage';
+import { CustomerMasterPage } from './pages/CustomerMasterPage';
 
 // 仮ページコンポーネント
 const DispatchPlanPage: React.FC = () => <div>配車計画画面（実装予定）</div>;
 const DispatchStatusPage: React.FC = () => <div>配車状況確認画面（実装予定）</div>;
-const CustomerMasterPage: React.FC = () => <div>荷主マスタ画面（実装予定）</div>;
 const UsersPage: React.FC = () => <div>ユーザー管理画面（実装予定）</div>;
 const SettingsPage: React.FC = () => <div>設定画面（実装予定）</div>;
 
