@@ -60,6 +60,15 @@ export interface Order {
   updatedAt: Date;
 }
 
+// アプリ設定
+export interface AppSettings {
+  supportedVehicleTypes: string[];
+  supportedRequestTypes: string[];
+  companyName: string;
+  updatedAt: Date;
+  updatedBy: string;
+}
+
 // 実績データ（日報）- 将来対応
 export interface DailyReport {
   reportId: string;
