@@ -1,13 +1,21 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User as FirebaseUser, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import {
+  User as FirebaseUser,
+  onAuthStateChanged,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { User, UserRole } from '../types';
+
+const googleProvider = new GoogleAuthProvider();
 
 interface AuthContextType {
   currentUser: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -28,7 +36,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // Check if email exists
         if (!firebaseUser.email) {
           console.error('User email is required but not found');
           await signOut(auth);
@@ -38,20 +45,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Firestoreからユーザー情報取得
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        const userDoc = await getDoc(userDocRef);
+
         if (userDoc.exists()) {
           const userData = userDoc.data();
           setCurrentUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             role: userData.role as UserRole,
-            displayName: userData.displayName,
-            createdAt: userData.createdAt.toDate(),
+            displayName: userData.displayName || firebaseUser.displayName || undefined,
+            createdAt: userData.createdAt?.toDate() || new Date(),
           });
         } else {
-          console.error('User document not found in Firestore for uid:', firebaseUser.uid);
-          await signOut(auth);
-          setCurrentUser(null);
+          // 初回Googleログイン: Firestoreにユーザードキュメントを自動作成
+          const newUser: Omit<User, 'createdAt'> & { createdAt: ReturnType<typeof Timestamp.now> } = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: 'admin' as UserRole,
+            displayName: firebaseUser.displayName || undefined,
+            createdAt: Timestamp.now(),
+          };
+          await setDoc(userDocRef, newUser);
+          setCurrentUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: 'admin',
+            displayName: firebaseUser.displayName || undefined,
+            createdAt: new Date(),
+          });
         }
       } else {
         setCurrentUser(null);
@@ -62,8 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, []);
 
-  const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+  const loginWithGoogle = async () => {
+    await signInWithPopup(auth, googleProvider);
   };
 
   const logout = async () => {
@@ -73,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = {
     currentUser,
     loading,
-    login,
+    loginWithGoogle,
     logout,
   };
 
