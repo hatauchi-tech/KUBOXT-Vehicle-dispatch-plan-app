@@ -35,47 +35,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        if (!firebaseUser.email) {
-          console.error('User email is required but not found');
-          await signOut(auth);
-          setCurrentUser(null);
-          setLoading(false);
-          return;
-        }
+      try {
+        if (firebaseUser) {
+          if (!firebaseUser.email) {
+            console.error('User email is required but not found');
+            await signOut(auth);
+            setCurrentUser(null);
+            setLoading(false);
+            return;
+          }
 
-        // Firestoreからユーザー情報取得
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const userDoc = await getDoc(userDocRef);
+          // Firestoreからユーザー情報取得
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
 
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setCurrentUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            role: userData.role as UserRole,
-            displayName: userData.displayName || firebaseUser.displayName || undefined,
-            createdAt: userData.createdAt?.toDate() || new Date(),
-          });
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setCurrentUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              role: userData.role as UserRole,
+              displayName: userData.displayName || firebaseUser.displayName || undefined,
+              createdAt: userData.createdAt?.toDate() || new Date(),
+            });
+          } else {
+            // 初回Googleログイン: Firestoreにユーザードキュメントを自動作成
+            const newUser = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              role: 'admin' as UserRole,
+              displayName: firebaseUser.displayName || undefined,
+              createdAt: Timestamp.now(),
+            };
+            await setDoc(userDocRef, newUser);
+            setCurrentUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              role: 'admin',
+              displayName: firebaseUser.displayName || undefined,
+              createdAt: new Date(),
+            });
+          }
         } else {
-          // 初回Googleログイン: Firestoreにユーザードキュメントを自動作成
-          const newUser: Omit<User, 'createdAt'> & { createdAt: ReturnType<typeof Timestamp.now> } = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            role: 'admin' as UserRole,
-            displayName: firebaseUser.displayName || undefined,
-            createdAt: Timestamp.now(),
-          };
-          await setDoc(userDocRef, newUser);
-          setCurrentUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            role: 'admin',
-            displayName: firebaseUser.displayName || undefined,
-            createdAt: new Date(),
-          });
+          setCurrentUser(null);
         }
-      } else {
+      } catch (error) {
+        console.error('Failed to load user data:', error);
         setCurrentUser(null);
       }
       setLoading(false);
