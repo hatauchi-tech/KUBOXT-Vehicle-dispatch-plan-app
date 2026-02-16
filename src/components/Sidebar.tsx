@@ -6,6 +6,17 @@ export const Sidebar: React.FC = () => {
   const location = useLocation();
   const { currentUser } = useAuth();
 
+  if (!currentUser) {
+    return (
+      <aside className="w-64 bg-gray-800 text-white min-h-screen p-4">
+        <div className="mb-8">
+          <h1 className="text-xl font-bold">配車計画アプリ</h1>
+        </div>
+        <div className="text-gray-400">読み込み中...</div>
+      </aside>
+    );
+  }
+
   const isActive = (path: string) => location.pathname === path;
 
   const menuItems = [
@@ -18,7 +29,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   const filteredMenuItems = menuItems.filter(item =>
-    currentUser && item.roles.includes(currentUser.role)
+    item.roles.includes(currentUser.role)
   );
 
   return (
