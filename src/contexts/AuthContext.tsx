@@ -28,17 +28,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
+        // Check if email exists
+        if (!firebaseUser.email) {
+          console.error('User email is required but not found');
+          await signOut(auth);
+          setCurrentUser(null);
+          setLoading(false);
+          return;
+        }
+
         // Firestoreからユーザー情報取得
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data();
           setCurrentUser({
             uid: firebaseUser.uid,
-            email: firebaseUser.email!,
+            email: firebaseUser.email,
             role: userData.role as UserRole,
             displayName: userData.displayName,
             createdAt: userData.createdAt.toDate(),
           });
+        } else {
+          console.error('User document not found in Firestore for uid:', firebaseUser.uid);
+          await signOut(auth);
+          setCurrentUser(null);
         }
       } else {
         setCurrentUser(null);
