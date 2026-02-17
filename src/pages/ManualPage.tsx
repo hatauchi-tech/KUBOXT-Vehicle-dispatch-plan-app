@@ -8,6 +8,7 @@ import {
   MapPin,
   Settings,
   FileSpreadsheet,
+  FileText,
   ChevronDown,
   ChevronRight,
   List,
@@ -144,38 +145,77 @@ const GettingStartedContent = () => (
 
     <Collapsible title="ログイン方法">
       <p className="mb-3">
-        ログイン画面でGoogleアカウントを使用してログインします。初回ログイン時は管理者による承認が必要な場合があります。
+        ログイン画面でGoogleアカウントを使用してログインします。
       </p>
-      <ol className="list-decimal pl-5 space-y-1">
+      <ol className="list-decimal pl-5 space-y-1 mb-3">
         <li>ログイン画面の「Googleでログイン」ボタンをクリックします。</li>
         <li>Googleアカウントを選択し、認証を許可します。</li>
-        <li>認証後、ロールに応じたトップページに遷移します。</li>
+        <li>認証後、ロールに応じたトップページに遷移します。
+          <ul className="list-disc pl-5 mt-1 text-gray-500">
+            <li>管理者・配車担当 → 配車計画ページ</li>
+            <li>ドライバー → ドライバーダッシュボード</li>
+          </ul>
+        </li>
       </ol>
+      <p className="text-xs text-gray-500">
+        初回ログイン時、ユーザーアカウントが自動的に作成されます。最初にログインしたユーザーには管理者（admin）ロールが付与されます。以降のユーザーのロールは管理者がユーザー管理画面から設定します。
+      </p>
     </Collapsible>
   </>
 );
 
 const DispatchPlanContent = () => (
   <>
-    <Collapsible title="リスト表示" defaultOpen>
+    <Collapsible title="画面構成" defaultOpen>
       <p className="mb-3">
-        受注一覧をリスト形式で確認できます。各受注の配車状況、荷主名、積込日時、荷卸日時などの情報が表示されます。
+        配車計画ページでは、画面上部のトグルで「リスト表示」と「ガントチャート表示」を切り替えられます。
+        どちらの表示でも、フィルター機能で表示する受注を絞り込むことができます。
       </p>
-      <ul className="list-disc pl-5 space-y-1 mb-3">
-        <li>ステータス（未配車/配車済み/完了）による絞り込み</li>
-        <li>荷主名や日付による検索</li>
-        <li>受注の詳細表示と編集</li>
+      <ul className="list-disc pl-5 space-y-1">
+        <li><strong>積込日（開始〜終了）</strong>で日付範囲を指定</li>
+        <li><strong>荷主</strong>で特定の荷主の受注のみ表示</li>
+        <li><strong>車種</strong>で依頼車種による絞り込み</li>
+        <li>フィルターは「クリア」ボタンで一括解除できます</li>
+      </ul>
+    </Collapsible>
+
+    <Collapsible title="リスト表示">
+      <p className="mb-3">
+        受注一覧をリスト形式で確認できます。「未配車一覧」と「配車済み一覧」に分かれて表示されます。
+      </p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>未配車一覧から「配車」ボタンで車両を割り当て</li>
+        <li>配車済み一覧は折りたたみ可能</li>
+        <li>各受注の編集・削除が可能</li>
+        <li>配車済み受注の「配車解除」で未配車に戻す</li>
       </ul>
     </Collapsible>
 
     <Collapsible title="ガントチャート">
       <p className="mb-3">
-        日別の配車状況をガントチャート形式でビジュアルに確認・操作できます。縦軸に車両、横軸に時間帯を配置し、各受注がバーとして表示されます。
+        配車状況をガントチャート形式でビジュアルに確認・操作できます。縦軸に車両、横軸に時間帯を配置し、各受注が色分けされたバーとして表示されます。
+      </p>
+
+      <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">無限スクロールタイムライン</h4>
+      <p className="mb-3">
+        タイムラインは左右に無限にスクロールできます。スクロール端に近づくと自動的に前後の日付が追加されます。
+        初期表示は現在時刻の位置に自動スクロールされ、現在時刻の位置には<span className="text-red-500 font-semibold">赤い縦線</span>が表示されます。
+        日付の境界には<span className="text-orange-500 font-semibold">オレンジ色の縦線</span>が表示されます。
+      </p>
+
+      <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">「今日」ボタン</h4>
+      <p className="mb-3">
+        画面上部の「今日」ボタンをクリックすると、現在時刻の位置にスムーズにスクロールします。遠い日付を見ている時に素早く戻れます。
+      </p>
+
+      <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">車両列の固定表示</h4>
+      <p className="mb-3">
+        画面左側の車両名・ドライバー名・車種の列は常に固定表示されます。タイムラインを左右にスクロールしても、どの車両の行かが常に確認できます。
       </p>
 
       <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">ドラッグ&ドロップで配車</h4>
       <p className="mb-3">
-        画面左の未配車パネルから受注を選択し、ガントチャート上の車両行にドラッグすることで配車を行えます。
+        画面左の「未配車オーダー」パネルから受注を選択し、ガントチャート上の車両行にドラッグすることで配車を行えます。対応車種が一致する車両は緑色、非対応の車両は赤色でハイライトされます。
       </p>
 
       <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">バーの移動</h4>
@@ -183,14 +223,20 @@ const DispatchPlanContent = () => (
         配車済みのバーを別の車両行にドラッグすることで、車両の入れ替えが行えます。
       </p>
 
-      <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">時間の調整</h4>
+      <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">時間の調整（リサイズ）</h4>
       <p className="mb-3">
-        バーの左右端をドラッグすることで、積込時間・荷卸時間を調整できます。時間は15分刻みでスナップします。
+        バーの左右端をドラッグすることで、積込時間・荷卸時間を調整できます。時間は15分刻みでスナップします。リサイズ中はツールチップで現在の時間が表示されます。
+      </p>
+
+      <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">車種別カラー表示</h4>
+      <p className="mb-3">
+        受注バーは依頼車種ごとに色分けされます。画面下部の凡例で車種と色の対応を確認できます。
+        バーにマウスを合わせると、荷主・品名・積込地・荷卸地などの詳細情報がツールチップで表示されます。
       </p>
 
       <h4 className="text-sm font-semibold text-gray-800 mt-4 mb-2">日またぎ案件</h4>
       <p>
-        複数日にわたる案件は矢印マーク付きで表示されます。積込日と荷卸日が異なる場合、それぞれの日のガントチャートに表示されます。
+        複数日にわたる案件は <Code>[連日]</Code> マーク付きで表示されます。タイムラインは連続しているため、日をまたぐバーも途切れずに表示されます。
       </p>
     </Collapsible>
 
@@ -220,31 +266,32 @@ const DispatchPlanContent = () => (
 
 const DispatchStatusContent = () => (
   <>
-    <Collapsible title="統計情報の確認" defaultOpen>
+    <Collapsible title="配車状況の確認" defaultOpen>
       <p className="mb-3">
-        配車状況ページでは、全体の配車状況を統計情報として確認できます。
+        配車状況ページでは、配車済みオーダーの進行状況をリアルタイムに確認できます。画面上部に全体の統計情報（総受注数・未配車数・配車済み数）が表示されます。
+      </p>
+    </Collapsible>
+
+    <Collapsible title="グルーピング表示">
+      <p className="mb-3">
+        配車済みオーダーは車両別にグルーピングされ、アコーディオン形式で表示されます。各車両グループを展開すると、その車両に割り当てられたオーダーの一覧が確認できます。
       </p>
       <ul className="list-disc pl-5 space-y-1">
-        <li>総受注件数、未配車件数、配車済み件数、完了件数</li>
-        <li>車両稼働率</li>
-        <li>日別・週別の配車推移</li>
+        <li>車両番号・ドライバー名でグルーピング</li>
+        <li>各オーダーの積込地・荷卸地・時間の確認</li>
+        <li>アコーディオンの開閉で見やすく整理</li>
       </ul>
     </Collapsible>
 
-    <Collapsible title="フィルターとグルーピング">
+    <Collapsible title="フィルター">
       <p className="mb-3">
-        さまざまな条件で配車状況を絞り込み、グルーピング表示できます。
+        日付範囲や荷主などの条件で表示を絞り込めます。
       </p>
-      <ul className="list-disc pl-5 space-y-1">
-        <li>日付範囲の指定</li>
-        <li>車両別、荷主別のグルーピング</li>
-        <li>ステータスによるフィルタリング</li>
-      </ul>
     </Collapsible>
 
     <Collapsible title="配車取消">
       <p>
-        配車済みの受注を選択し、配車取消を行うことができます。取消された受注は未配車の状態に戻り、再度ガントチャートから配車可能になります。
+        配車済みの受注を選択し、配車取消を行うことができます。取消された受注は未配車の状態に戻り、配車計画ページから再度配車可能になります。
       </p>
     </Collapsible>
   </>
@@ -310,28 +357,65 @@ const UserManagementContent = () => (
 
 const DriverFeaturesContent = () => (
   <>
-    <Collapsible title="マイ配車" defaultOpen>
+    <Collapsible title="ドライバーダッシュボード" defaultOpen>
       <p className="mb-3">
-        ドライバーに割り当てられた配車を日別で確認できます。
+        ドライバーとしてログインすると、ドライバーダッシュボードがトップページとして表示されます。自分に割り当てられた配車情報を確認できます。
       </p>
       <ul className="list-disc pl-5 space-y-1">
         <li>本日の配車スケジュールの確認</li>
         <li>積込地・荷卸地の詳細情報</li>
-        <li>品名、荷主名の確認</li>
+        <li>品名、荷主名、時間帯の確認</li>
         <li>日付を切り替えて先の予定を確認</li>
       </ul>
     </Collapsible>
 
-    <Collapsible title="日報入力">
+    <Collapsible title="日報入力・管理">
       <p className="mb-3">
-        運行終了後、日報を入力します。
+        運行終了後、日報を入力します。日報管理ページ（サイドバーの「日報管理」）からアクセスできます。
       </p>
-      <ul className="list-disc pl-5 space-y-1">
+      <ul className="list-disc pl-5 space-y-1 mb-3">
         <li>出庫時間・帰庫時間の記録</li>
         <li>出発メーター・帰着メーターの記録</li>
-        <li>出発前点検の結果入力</li>
+        <li>積込開始・終了時間の記録</li>
+        <li>荷卸開始・終了時間の記録</li>
+        <li>車両点検メモの入力</li>
         <li>運行中の特記事項の記録</li>
       </ul>
+      <p className="text-xs text-gray-500">
+        管理者・配車担当は全ドライバーの日報を閲覧・編集できます。ドライバーは自分の日報のみ入力可能です。
+      </p>
+    </Collapsible>
+  </>
+);
+
+const DailyReportContent = () => (
+  <>
+    <Collapsible title="日報の作成" defaultOpen>
+      <p className="mb-3">
+        日報管理ページでは、各運行の日報を作成・管理できます。配車済みのオーダーに対して日報を作成できます。
+      </p>
+      <ul className="list-disc pl-5 space-y-1">
+        <li>対象のオーダー（受注ID）を選択して日報を新規作成</li>
+        <li>車両番号は自動的にセットされます</li>
+        <li>出庫時間・帰庫時間を記録</li>
+        <li>出発メーター・帰着メーター（走行距離管理用）を記録</li>
+        <li>積込開始・終了時間、荷卸開始・終了時間を記録</li>
+        <li>車両点検内容や特記事項をメモとして記録</li>
+      </ul>
+    </Collapsible>
+
+    <Collapsible title="日報の確認・編集">
+      <p className="mb-3">
+        作成済みの日報は一覧で確認できます。管理者・配車担当は全ドライバーの日報を閲覧・編集・削除できます。
+      </p>
+    </Collapsible>
+
+    <Collapsible title="アクセス権限">
+      <p>
+        ドライバーは <Code>/daily-report</Code> から自分の日報を入力できます。
+        管理者・配車担当は <Code>/daily-reports</Code> から全員の日報を管理できます。
+        サイドバーのメニューからそれぞれのページにアクセスできます。
+      </p>
     </Collapsible>
   </>
 );
@@ -511,6 +595,13 @@ const sections: Section[] = [
     title: '運転手向け機能',
     icon: MapPin,
     content: <DriverFeaturesContent />,
+  },
+  {
+    id: 'daily-report',
+    label: '日報管理',
+    title: '日報管理',
+    icon: FileText,
+    content: <DailyReportContent />,
   },
   {
     id: 'settings',
