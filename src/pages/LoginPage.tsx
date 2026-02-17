@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { Truck } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
@@ -24,17 +25,31 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 className="text-2xl font-bold mb-2 text-center">配車計画アプリ</h1>
-        <p className="text-gray-500 text-sm text-center mb-6">株式会社KUBOXT</p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 px-4 sm:px-6">
+      <div className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-sm sm:max-w-md">
+        {/* Icon */}
+        <div className="flex justify-center mb-6">
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/30">
+            <Truck className="w-8 h-8 text-white" />
+          </div>
+        </div>
 
-        {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">{error}</div>}
+        {/* Title */}
+        <h1 className="text-2xl font-bold text-gray-900 text-center tracking-tight">配車計画アプリ</h1>
+        <p className="text-gray-400 text-sm text-center mt-1 mb-8">株式会社KUBOXT</p>
 
+        {/* Error */}
+        {error && (
+          <div className="mb-6 p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm text-center">
+            {error}
+          </div>
+        )}
+
+        {/* Google Login Button */}
         <button
           onClick={handleGoogleLogin}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+          className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 py-3 px-4 rounded-xl hover:bg-gray-50 hover:border-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed transition-all text-sm font-medium shadow-sm"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path
@@ -57,7 +72,8 @@ export const LoginPage: React.FC = () => {
           {loading ? 'ログイン中...' : 'Googleアカウントでログイン'}
         </button>
 
-        <p className="mt-4 text-xs text-gray-400 text-center">
+        {/* Footer note */}
+        <p className="mt-6 text-xs text-gray-400 text-center">
           初回ログイン時は自動的にアカウントが作成されます
         </p>
       </div>

@@ -51,73 +51,77 @@ export const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSubmit, 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-4">{customer ? '荷主編集' : '荷主追加'}</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-gray-700 mb-2">荷主ID *</label>
-              <input
-                type="text"
-                value={formData.customerId}
-                onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-                required
-                disabled={!!customer}
-              />
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl shadow-2xl p-0 w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">{customer ? '荷主編集' : '荷主追加'}</h2>
+        </div>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">荷主ID *</label>
+                <input
+                  type="text"
+                  value={formData.customerId}
+                  onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white"
+                  required
+                  disabled={!!customer}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">荷主名 *</label>
+                <input
+                  type="text"
+                  value={formData.customerName}
+                  onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">電話番号</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">住所</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">備考</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white"
+                  rows={3}
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-gray-700 mb-2">荷主名 *</label>
-              <input
-                type="text"
-                value={formData.customerName}
-                onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-gray-700 mb-2">電話番号</label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-gray-700 mb-2">住所</label>
-              <input
-                type="text"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-gray-700 mb-2">備考</label>
-              <textarea
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-                rows={3}
-              />
-            </div>
+            {error && <div className="mt-4 text-red-500 text-sm">{error}</div>}
           </div>
-          {error && <div className="mt-4 text-red-500 text-sm">{error}</div>}
-          <div className="mt-6 flex justify-end space-x-4">
+          <div className="px-4 sm:px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3">
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+              className="px-4 py-2 min-h-[44px] text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
               キャンセル
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
+              className="px-4 py-2 min-h-[44px] text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
             >
               {loading ? '保存中...' : '保存'}
             </button>

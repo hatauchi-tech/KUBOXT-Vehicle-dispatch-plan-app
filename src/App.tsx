@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './pages/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
@@ -9,6 +9,17 @@ import { DispatchPlanPage } from './pages/DispatchPlanPage';
 import { DispatchStatusPage } from './pages/DispatchStatusPage';
 import { UsersPage } from './pages/UsersPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { DriverDashboardPage } from './pages/DriverDashboardPage';
+import { DailyReportPage } from './pages/DailyReportPage';
+import { ManualPage } from './pages/ManualPage';
+
+const HomeRedirect = () => {
+  const { currentUser } = useAuth();
+  if (currentUser?.role === 'driver') {
+    return <Navigate to="/driver" />;
+  }
+  return <Navigate to="/dispatch-plan" />;
+};
 
 function App() {
   return (
@@ -20,7 +31,7 @@ function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <Navigate to="/dispatch-plan" />
+                <HomeRedirect />
               </ProtectedRoute>
             }
           />
@@ -37,6 +48,30 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'dispatcher']}>
                 <Layout><DispatchStatusPage /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/driver"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'dispatcher', 'driver']}>
+                <Layout><DriverDashboardPage /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/daily-report"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'dispatcher', 'driver']}>
+                <Layout><DailyReportPage /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/daily-reports"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'dispatcher']}>
+                <Layout><DailyReportPage /></Layout>
               </ProtectedRoute>
             }
           />
@@ -69,6 +104,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <Layout><SettingsPage /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/manual"
+            element={
+              <ProtectedRoute>
+                <Layout><ManualPage /></Layout>
               </ProtectedRoute>
             }
           />

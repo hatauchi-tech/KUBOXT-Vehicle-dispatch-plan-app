@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Plus, Users } from 'lucide-react';
 import { useUsers } from '../hooks/useUsers';
 import { UserList } from '../components/users/UserList';
 import { UserForm } from '../components/users/UserForm';
@@ -47,26 +48,48 @@ export const UsersPage: React.FC = () => {
   };
 
   if (loading) {
-    return <div>読み込み中...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <div className="text-gray-400 text-sm">読み込み中...</div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-red-500">{error}</div>;
+    return (
+      <div className="p-4">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
+      </div>
+    );
   }
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">ユーザー管理</h1>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 text-blue-600">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-gray-900">ユーザー管理</h1>
+            <span className="inline-flex items-center gap-1 mt-0.5 text-xs text-gray-500">
+              登録人数
+              <span className="inline-flex items-center justify-center bg-gray-100 text-gray-700 rounded-full px-2 py-0.5 text-xs font-medium">
+                {users.length}人
+              </span>
+            </span>
+          </div>
+        </div>
         <button
           onClick={handleAdd}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
+          <Plus className="w-4 h-4" />
           ユーザー追加
         </button>
       </div>
       {message && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-green-800">
+        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-sm">
           {message}
         </div>
       )}

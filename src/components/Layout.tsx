@@ -1,4 +1,4 @@
-import React from 'react';
+import { SidebarProvider } from '../contexts/SidebarContext';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 
@@ -6,14 +6,16 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children }) => {
+export function Layout({ children }: LayoutProps): React.JSX.Element {
   return (
-    <div className="flex">
-      <Sidebar />
-      <div className="flex-1">
-        <Header />
-        <main className="p-6">{children}</main>
+    <SidebarProvider>
+      <div className="flex h-screen overflow-hidden bg-surface">
+        <Sidebar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <Header />
+          <main className="flex-1 overflow-y-auto p-5">{children}</main>
+        </div>
       </div>
-    </div>
+    </SidebarProvider>
   );
-};
+}

@@ -27,3 +27,12 @@ dist-ssr
 .env
 .env.local
 .env.production
+
+# Firebase
+.firebase/
+
+# TypeScript build info
+tsconfig.tsbuildinfo
+
+# Screenshots
+*.png
